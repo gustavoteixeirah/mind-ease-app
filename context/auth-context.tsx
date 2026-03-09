@@ -51,6 +51,9 @@ interface AuthContextValue {
 		displayName: string,
 	) => Promise<{ success: boolean; error?: string }>;
 	signOut: () => void;
+	updateProfile: (
+		displayName: string,
+	) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -59,6 +62,7 @@ const AuthContext = createContext<AuthContextValue>({
 	signIn: async () => ({ success: false }),
 	signUp: async () => ({ success: false }),
 	signOut: () => {},
+	updateProfile: async () => ({ success: false }),
 });
 
 export function useAuth() {
@@ -178,6 +182,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		[],
 	);
 
+	const updateProfileFn = useCallback(async (displayName: string) => {
+		try {
+			const accessToken = tokensRef.current?.accessToken;
+			if (!accessToken) return { success: false, error: "Não autenticado" };
+
+			const stackUser = await updateUser(accessToken, { display_name: displayName });
+			setUser(toAppUser(stackUser));
+			return { success: true };
+		} catch (e: unknown) {
+			const msg = e instanceof Error ? e.message : "Erro ao atualizar perfil";
+			return { success: false, error: msg };
+		}
+	}, []);
+
 	const signOutFn = useCallback(() => {
 		// Clear local state immediately (synchronous)
 		const token = tokensRef.current?.accessToken;
@@ -199,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				signIn,
 				signUp,
 				signOut: signOutFn,
+				updateProfile: updateProfileFn,
 			}}
 		>
 			{children}
