@@ -3,6 +3,7 @@ import { Home, LayoutList, Plus, Settings } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import DashboardScreen from "./app/(app)/dashboard";
+import AddEditTaskScreen from "./screens/AddEditTaskScreen";
 import TaskListScreen from "./screens/TaskListScreen";
 
 const Tab = createBottomTabNavigator();
@@ -50,8 +51,8 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
+        name="AddTask"
+        component={AddEditTaskScreen}
         options={{
           tabBarLabel: "",
           headerShown: false,
