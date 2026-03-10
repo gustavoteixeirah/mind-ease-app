@@ -78,56 +78,67 @@ const TaskListScreen = () => {
       </View>
       <View
         style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
+          borderTopWidth: 1,
+          borderTopColor: "#E5E7EB",
           marginTop: 20,
-          marginBottom: 20,
+          borderRadius: 8,
+          padding: 16,
         }}
       >
         <View
           style={{
             display: "flex",
-            flex: 1,
             flexDirection: "row",
+            alignItems: "center",
+            marginTop: 20,
+            marginBottom: 20,
           }}
         >
-          <ArrowLeft size={26} color="black" />
-          <Text style={styles.title}>Hoje</Text>
-        </View>
-        <View
-          style={{
-            display: "flex",
-            flex: 1,
-            flexDirection: "row",
-            justifyContent: "flex-end",
-          }}
-        >
-          <Calendar size={26} color="black" />
-          <ArrowRight size={26} color="black" />
-        </View>
-      </View>
-
-      {uniqueComplexity.map((comp, index) => (
-        <>
-          <View style={styles.badge} key={index}>
-            <Text style={styles.badgeText}>{comp}</Text>
+          <View
+            style={{
+              display: "flex",
+              flex: 1,
+              flexDirection: "row",
+              alignItems: "center",
+            }}
+          >
+            <ArrowLeft size={26} color="black" />
+            <Text style={styles.title}>Hoje</Text>
           </View>
-          <FlatList
-            data={filterByComplexity(tasks, comp)}
-            renderItem={({ item }) => (
-              <ListItem
-                {...item}
-                detailedMode={detailedMode}
-                onPress={() => {
-                  item.completed = !item.completed;
-                }}
-              />
-            )}
-            keyExtractor={(item) => item.id}
-          />
-        </>
-      ))}
+          <View
+            style={{
+              display: "flex",
+              flex: 1,
+              flexDirection: "row",
+              justifyContent: "flex-end",
+            }}
+          >
+            <Calendar size={26} color="black" />
+            <ArrowRight size={26} color="black" />
+          </View>
+        </View>
+
+        {uniqueComplexity.map((comp, index) => (
+          <>
+            <View style={styles.badge} key={index}>
+              <Text style={styles.badgeText}>{comp}</Text>
+            </View>
+            <FlatList
+              data={filterByComplexity(tasks, comp)}
+              renderItem={({ item }) => (
+                <ListItem
+                  {...item}
+                  detailedMode={detailedMode}
+                  onPress={() => {
+                    item.completed = !item.completed;
+                  }}
+                />
+              )}
+              keyExtractor={(item) => item.id}
+            />
+          </>
+        ))}
+      </View>
     </View>
   );
 };
@@ -141,7 +152,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 26,
+    fontSize: 24,
     color: "#000",
   },
   badge: {
@@ -149,7 +160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 5,
     borderRadius: 20,
-    width: "fit-content",
+    alignSelf: "flex-start",
     marginVertical: 10,
   },
   badgeText: {
