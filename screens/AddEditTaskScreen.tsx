@@ -142,8 +142,7 @@ export default function AddEditTaskScreen() {
   const estimatedMinutes = parseEstimatedMinutes(estimatedTime);
   const isExigente = effort === "exigente";
   const isAltaAgora = priority === "alta" && when === "agora";
-  const isMenosDe30Min =
-    estimatedMinutes !== null && estimatedMinutes < 30;
+  const isMenosDe30Min = estimatedMinutes !== null && estimatedMinutes < 30;
   const showFocusSuggestion =
     isExigente || isAltaAgora || isMenosDe30Min || (isExigente && isAltaAgora);
 
@@ -545,7 +544,9 @@ export default function AddEditTaskScreen() {
                       ]}
                     />
                   </View>
-                  <Text style={[styles.focusSuggestionText, { color: iconColor }]}>
+                  <Text
+                    style={[styles.focusSuggestionText, { color: iconColor }]}
+                  >
                     Essa tarefa combina com o modo foco.
                   </Text>
                 </View>
