@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 
 import { AuthProvider } from "@/context/auth-context";
+import { FontScaleProvider } from "@/context/font-scale-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function RootLayout() {
@@ -15,6 +16,7 @@ export default function RootLayout() {
 
 	return (
 		<AuthProvider>
+			<FontScaleProvider>
 			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
 				<Stack screenOptions={{ headerShown: false }}>
 					<Stack.Screen name="index" />
@@ -23,6 +25,7 @@ export default function RootLayout() {
 				</Stack>
 				<StatusBar style="auto" />
 			</ThemeProvider>
+			</FontScaleProvider>
 		</AuthProvider>
 	);
 }

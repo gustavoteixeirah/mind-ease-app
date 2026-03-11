@@ -1,4 +1,5 @@
 import { Colors } from "@/constants/theme";
+import { useFontScale } from "@/context/font-scale-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { LinearGradient } from "expo-linear-gradient";
@@ -153,11 +154,12 @@ export default function AddEditTaskScreen() {
   };
 
   const headerGradientColors = isDark
-    ? ["#1a1a2e", "#16213e", "#0f3460"]
-    : ["#667eea", "#764ba2", "#5a67d8"];
+    ? (["#1a1a2e", "#16213e", "#0f3460"] as const)
+    : (["#667eea", "#764ba2", "#5a67d8"] as const);
 
   const contentBg = isDark ? Colors.dark.background : "#fff";
   const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const { fs } = useFontScale();
 
   return (
     <View style={[styles.wrapper, { backgroundColor: contentBg }]}>
@@ -174,7 +176,7 @@ export default function AddEditTaskScreen() {
             >
               <ArrowLeft size={24} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>
+            <Text style={[styles.headerTitle, { fontSize: fs(18) }]}>
               {isEdit ? "Editar tarefa" : "Criar nova tarefa"}
             </Text>
             <View style={styles.backButton} />
@@ -202,7 +204,7 @@ export default function AddEditTaskScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Text style={[styles.sectionLabel, { color: textColor }]}>
+            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
               Tarefa
             </Text>
             <TextInput
@@ -220,7 +222,7 @@ export default function AddEditTaskScreen() {
               onChangeText={setTitle}
             />
 
-            <Text style={[styles.sectionLabel, { color: textColor }]}>
+            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
               Para quando deve ser feito?
             </Text>
             <View style={styles.chipRow}>
@@ -264,7 +266,7 @@ export default function AddEditTaskScreen() {
               ))}
             </View>
 
-            <Text style={[styles.sectionLabel, { color: textColor }]}>
+            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
               Esforço mental
             </Text>
             <View style={styles.chipRow}>
@@ -401,7 +403,7 @@ export default function AddEditTaskScreen() {
 
               {detailsExpanded && (
                 <View style={styles.detailsContent}>
-                  <Text style={[styles.sectionLabel, { color: textColor }]}>
+                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
                     Prioridade
                   </Text>
                   <View style={styles.chipRow}>
@@ -431,7 +433,7 @@ export default function AddEditTaskScreen() {
                     ))}
                   </View>
 
-                  <Text style={[styles.sectionLabel, { color: textColor }]}>
+                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
                     Tempo estimado
                   </Text>
                   <TextInput
@@ -449,7 +451,7 @@ export default function AddEditTaskScreen() {
                     onChangeText={setEstimatedTime}
                   />
 
-                  <Text style={[styles.sectionLabel, { color: textColor }]}>
+                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
                     Descrição
                   </Text>
                   <TextInput
@@ -469,7 +471,7 @@ export default function AddEditTaskScreen() {
                     numberOfLines={4}
                   />
 
-                  <Text style={[styles.sectionLabel, { color: textColor }]}>
+                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
                     Tags
                   </Text>
                   <View
@@ -637,7 +639,7 @@ export default function AddEditTaskScreen() {
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1 },
-  gradientHeader: { paddingBottom: 8 },
+  gradientHeader: { paddingBottom: 28 },
   headerSafe: { paddingHorizontal: 16 },
   headerRow: {
     flexDirection: "row",
@@ -659,11 +661,12 @@ const styles = StyleSheet.create({
   },
   contentBox: {
     flex: 1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -20,
     paddingTop: 20,
     paddingHorizontal: 20,
+    overflow: "hidden",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,

@@ -1,7 +1,11 @@
 import { useAuth } from "@/context/auth-context";
 import TabNavigator from "@/Navigation";
+import FocusModeScreen from "@/screens/FocusModeScreen";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
+
+const Stack = createNativeStackNavigator();
 
 export default function AppLayout() {
   const { user, isLoading } = useAuth();
@@ -14,8 +18,12 @@ export default function AppLayout() {
   }, [user, isLoading, router]);
 
   return (
-    <>
-      <TabNavigator />
-    </>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Tabs"
+    >
+      <Stack.Screen name="Tabs" component={TabNavigator} />
+      <Stack.Screen name="FocusMode" component={FocusModeScreen} />
+    </Stack.Navigator>
   );
 }

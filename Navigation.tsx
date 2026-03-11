@@ -1,3 +1,6 @@
+import { Colors } from "@/constants/theme";
+import { useFontScale } from "@/context/font-scale-context";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Home, LayoutList, Plus, Settings } from "lucide-react-native";
 import React from "react";
@@ -15,13 +18,27 @@ const SettingsScreen = () => (
 );
 
 const TabNavigator = () => {
+  const colorScheme = useColorScheme() ?? "light";
+  const isDark = colorScheme === "dark";
+
+  const tabBarBg = isDark ? Colors.dark.background : "#fff";
+  const tabBarBorder = isDark ? "rgba(255,255,255,0.08)" : "#e5e7eb";
+  const tabBarActiveTint = isDark ? Colors.dark.tint : "#111827";
+  const tabBarInactiveTint = isDark ? "#9BA1A6" : "#6B7280";
+  const plusButtonBg = isDark ? "#312e81" : "#CBE4F7";
+  const plusButtonColor = isDark ? "#C7D2FE" : "#111827";
+  const { fs } = useFontScale();
+
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarActiveTintColor: "black",
-        tabBarInactiveTintColor: "gray",
+        tabBarStyle: [
+          styles.tabBar,
+          { backgroundColor: tabBarBg, borderTopColor: tabBarBorder },
+        ],
+        tabBarLabelStyle: [styles.tabBarLabel, { fontSize: fs(11) }],
+        tabBarActiveTintColor: tabBarActiveTint,
+        tabBarInactiveTintColor: tabBarInactiveTint,
         headerShown: false,
         tabBarIconStyle: { fontSize: 18 },
       }}
@@ -31,7 +48,7 @@ const TabNavigator = () => {
         component={DashboardScreen}
         options={{
           headerShown: false,
-          tabBarIcon: ({ color }) => <Home color={color} />,
+          tabBarIcon: ({ color }) => <Home color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -39,7 +56,7 @@ const TabNavigator = () => {
         component={TaskListScreen}
         options={{
           headerShown: false,
-          tabBarIcon: ({ color }) => <LayoutList color={color} />,
+          tabBarIcon: ({ color }) => <LayoutList color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -47,7 +64,7 @@ const TabNavigator = () => {
         component={SettingsScreen}
         options={{
           headerShown: false,
-          tabBarIcon: ({ color }) => <Settings color={color} />,
+          tabBarIcon: ({ color }) => <Settings color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -57,32 +74,31 @@ const TabNavigator = () => {
           tabBarLabel: "",
           headerShown: false,
           tabBarIcon: () => (
-            <Plus color={styles.plusButton.color} style={styles.plusButton} />
+            <Plus
+              color={plusButtonColor}
+              size={22}
+              style={[styles.plusButton, { backgroundColor: plusButtonBg }]}
+            />
           ),
         }}
       />
     </Tab.Navigator>
   );
 };
+
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
     height: 70,
-    borderColor: "#e0e0e0",
   },
   tabBarLabel: {
     fontSize: 11,
     fontWeight: "500",
   },
   plusButton: {
-    position: "absolute",
-
-    backgroundColor: "#CBE4f7",
     padding: 10,
     borderRadius: 7,
-    color: "#000",
   },
 });
+
 export default TabNavigator;
