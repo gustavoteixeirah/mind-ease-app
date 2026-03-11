@@ -2,8 +2,9 @@ import { Colors } from "@/constants/theme";
 import { useFontScale } from "@/context/font-scale-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import {
   ArrowLeft,
   Calendar,
@@ -88,7 +89,7 @@ function parseEstimatedMinutes(value: string): number | null {
 
 export default function AddEditTaskScreen() {
   const params = useLocalSearchParams<{ taskId?: string }>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const colorScheme = useColorScheme() ?? "light";
   const isDark = colorScheme === "dark";
 
@@ -116,7 +117,14 @@ export default function AddEditTaskScreen() {
 
   const isEdit = Boolean(params?.taskId);
 
-  const handleBack = () => router.back();
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      (navigation.getParent() as { navigate: (name: string) => void } | undefined)
+        ?.navigate("Tarefas");
+    }
+  };
 
   const addSubtaskFromTop = () => {
     const text = newSubtaskText.trim();
