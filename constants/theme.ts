@@ -5,6 +5,16 @@
 
 import { Platform } from 'react-native';
 
+/** Modo de tamanho de fonte baseado no perfil */
+export type FontSizeMode = 'compacto' | 'conforto' | 'acessivel';
+
+/** Fator de escala por modo: compacto (pequena), conforto (normal), acessível (maior) */
+export const FONT_SCALE: Record<FontSizeMode, number> = {
+  compacto: 0.9,
+  conforto: 1,
+  acessivel: 1.15,
+};
+
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
 
