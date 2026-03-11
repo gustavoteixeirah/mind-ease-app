@@ -1,491 +1,521 @@
+import type { FontSizeMode } from "@/constants/theme";
+import { Colors, THEME_COLORS, getThemePreset } from "@/constants/theme";
+import type { AppearanceMode } from "@/context/appearance-context";
+import { useAppearance } from "@/context/appearance-context";
 import { useAuth } from "@/context/auth-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFontScale } from "@/context/font-scale-context";
+import { useThemeAccentWithSetter } from "@/context/theme-accent-context";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
-	ActivityIndicator,
-	Alert,
-	ScrollView,
-	StyleSheet,
-	Text,
-	TextInput,
-	TouchableOpacity,
-	View,
+  PreferenceKeys,
+  getPreferenceString,
+  setPreferenceString,
+} from "@/lib/storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const STORAGE_KEYS = {
-	FONT_SIZE: "@mindease_font_size",
-	SUMMARY_MODE: "@mindease_summary_mode",
-	HIGH_CONTRAST: "@mindease_high_contrast",
-	CONDITIONS: "@mindease_conditions",
-};
+const FOCUS_OPTIONS = [25, 30, 35] as const;
+const PAUSE_OPTIONS = [2, 5, 10] as const;
 
-type FontSize = "small" | "medium" | "large";
+const FONT_MODE_OPTIONS: { mode: FontSizeMode; label: string; icon: string }[] = [
+  { mode: "compacto", label: "Compacto", icon: "A↓" },
+  { mode: "conforto", label: "Conforto", icon: "AA" },
+  { mode: "acessivel", label: "Acessível", icon: "A↑" },
+];
 
-const CONDITIONS_LIST = [
-	"TDAH",
-	"TEA (Autismo)",
-	"Dislexia",
-	"Burnout / Sobrecarga mental",
-	"Dificuldade de foco e retencao",
-	"Ansiedade em ambientes digitais",
-	"Sobrecarga sensorial",
+const APPEARANCE_OPTIONS: { id: AppearanceMode; label: string }[] = [
+  { id: "light", label: "Claro" },
+  { id: "dark", label: "Escuro" },
+  { id: "system", label: "Sistema" },
 ];
 
 export default function ProfileScreen() {
-	const { user, signOut, updateProfile } = useAuth();
-	const router = useRouter();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
+  const colorScheme = useColorScheme() ?? "light";
+  const isDark = colorScheme === "dark";
+  const { mode: fontSizeMode, setMode: setFontSizeMode, fs } = useFontScale();
+  const { setThemeColorIndex: setGlobalThemeIndex } = useThemeAccentWithSetter();
+  const { appearance: savedAppearance, setAppearance: setGlobalAppearance } = useAppearance();
 
-	// User data
-	const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-	const [isSaving, setIsSaving] = useState(false);
+  const [focusMinutes, setFocusMinutes] = useState(25);
+  const [pauseMinutes, setPauseMinutes] = useState(5);
+  const [themeColorIndex, setThemeColorIndex] = useState(0);
+  const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(savedAppearance);
+  const [isSaving, setIsSaving] = useState(false);
 
-	// Conditions
-	const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
+  const themePreset = getThemePreset(themeColorIndex);
+  const contentBg = isDark ? Colors.dark.background : "#fff";
+  const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const cardBg = isDark ? "#1e1e24" : "#FFF";
+  const textColor = isDark ? "#ECEDEE" : "#111827";
+  const secondaryText = isDark ? "#9BA1A6" : "#6B7280";
+  const borderColor = isDark ? "rgba(255,255,255,0.08)" : "#E5E7EB";
+  const selectedBg = isDark ? themePreset.buttonBg : themePreset.accent;
+  const selectedBorder = themePreset.selectedBorder;
 
-	// Accessibility preferences
-	const [fontSize, setFontSize] = useState<FontSize>("medium");
-	const [summaryMode, setSummaryMode] = useState(false);
-	const [highContrast, setHighContrast] = useState(false);
+  const headerGradientColors = isDark
+    ? themePreset.gradientDark
+    : themePreset.gradient;
+  const headerTextColor = "#fff";
+  const headerSecondaryColor = "rgba(255,255,255,0.9)";
+  const headerAvatarBg = "rgba(255,255,255,0.25)";
+  const headerAvatarText = "#fff";
 
-	// Load saved preferences on mount
-	useEffect(() => {
-		async function loadPreferences() {
-			try {
-				const [savedFont, savedSummary, savedContrast, savedConditions] =
-					await Promise.all([
-						AsyncStorage.getItem(STORAGE_KEYS.FONT_SIZE),
-						AsyncStorage.getItem(STORAGE_KEYS.SUMMARY_MODE),
-						AsyncStorage.getItem(STORAGE_KEYS.HIGH_CONTRAST),
-						AsyncStorage.getItem(STORAGE_KEYS.CONDITIONS),
-					]);
+  useEffect(() => {
+    try {
+      const savedFocus = getPreferenceString(PreferenceKeys.FOCUS_MINUTES);
+      const savedPause = getPreferenceString(PreferenceKeys.PAUSE_MINUTES);
+      const savedTheme = getPreferenceString(PreferenceKeys.THEME_COLOR_INDEX);
+      if (savedFocus) {
+        const n = parseInt(savedFocus, 10);
+        if (FOCUS_OPTIONS.includes(n as 25 | 30 | 35)) setFocusMinutes(n);
+      }
+      if (savedPause) {
+        const n = parseInt(savedPause, 10);
+        if (PAUSE_OPTIONS.includes(n as 2 | 5 | 10)) setPauseMinutes(n);
+      }
+      if (savedTheme !== undefined) {
+        const i = parseInt(savedTheme, 10);
+        if (i >= 0 && i < THEME_COLORS.length) setThemeColorIndex(i);
+      }
+      const savedApp = getPreferenceString(PreferenceKeys.APPEARANCE);
+      if (savedApp === "light" || savedApp === "dark" || savedApp === "system") {
+        setAppearanceMode(savedApp);
+      }
+    } catch (e) {
+      console.warn("Failed to load profile preferences:", e);
+    }
+  }, []);
 
-				if (savedFont) setFontSize(savedFont as FontSize);
-				if (savedSummary) setSummaryMode(savedSummary === "true");
-				if (savedContrast) setHighContrast(savedContrast === "true");
-				if (savedConditions) setSelectedConditions(JSON.parse(savedConditions));
-			} catch (e) {
-				console.warn("Failed to load preferences:", e);
-			}
-		}
-		loadPreferences();
-	}, []);
+  const SAVE_LOADING_DELAY_MS = 500;
 
-	// Persist helpers
-	const saveFontSize = useCallback(async (value: FontSize) => {
-		setFontSize(value);
-		await AsyncStorage.setItem(STORAGE_KEYS.FONT_SIZE, value);
-	}, []);
+  const handleSavePreferences = useCallback(() => {
+    setIsSaving(true);
+    try {
+      setPreferenceString(PreferenceKeys.FONT_SCALE_MODE, fontSizeMode);
+      setPreferenceString(PreferenceKeys.FOCUS_MINUTES, String(focusMinutes));
+      setPreferenceString(PreferenceKeys.PAUSE_MINUTES, String(pauseMinutes));
+      setPreferenceString(PreferenceKeys.THEME_COLOR_INDEX, String(themeColorIndex));
+      setPreferenceString(PreferenceKeys.APPEARANCE, appearanceMode);
+      setGlobalThemeIndex(themeColorIndex);
+      setGlobalAppearance(appearanceMode);
+      Alert.alert("Sucesso", "Preferências salvas.");
+    } catch (e) {
+      Alert.alert("Erro", "Não foi possível salvar as preferências.");
+    } finally {
+      setTimeout(() => setIsSaving(false), SAVE_LOADING_DELAY_MS);
+    }
+  }, [fontSizeMode, focusMinutes, pauseMinutes, themeColorIndex, appearanceMode, setGlobalThemeIndex, setGlobalAppearance]);
 
-	const saveSummaryMode = useCallback(async (value: boolean) => {
-		setSummaryMode(value);
-		await AsyncStorage.setItem(STORAGE_KEYS.SUMMARY_MODE, String(value));
-	}, []);
+  const handleSignOut = useCallback(() => {
+    signOut();
+    router.replace("/(auth)/login");
+  }, [signOut, router]);
 
-	const saveHighContrast = useCallback(async (value: boolean) => {
-		setHighContrast(value);
-		await AsyncStorage.setItem(STORAGE_KEYS.HIGH_CONTRAST, String(value));
-	}, []);
+  const displayName =
+    (user?.displayName || user?.primaryEmail || "usuário")
+      .split(/[@.]/)[0]
+      .trim() || "usuário";
+  const nameToShow =
+    displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
+  const avatarLetter = nameToShow.charAt(0);
 
-	const toggleCondition = useCallback(
-		async (condition: string) => {
-			const updated = selectedConditions.includes(condition)
-				? selectedConditions.filter((c) => c !== condition)
-				: [...selectedConditions, condition];
-			setSelectedConditions(updated);
-			await AsyncStorage.setItem(
-				STORAGE_KEYS.CONDITIONS,
-				JSON.stringify(updated),
-			);
-		},
-		[selectedConditions],
-	);
+  return (
+    <View style={[styles.container, { backgroundColor: contentBg }]}>
+      <LinearGradient
+        colors={headerGradientColors}
+        style={styles.gradientHeader}
+      >
+        <SafeAreaView edges={["top"]} style={styles.headerSafe}>
+          {/* Linha: Perfil + Sair */}
+          <View style={styles.headerRow}>
+            <Text
+              style={[
+                styles.headerTitle,
+                { color: headerTextColor, fontSize: fs(22) },
+              ]}
+            >
+              Perfil
+            </Text>
+            <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7}>
+              <Text
+                style={[
+                  styles.sairButton,
+                  { color: headerTextColor, fontSize: fs(16) },
+                ]}
+              >
+                Sair
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {/* Avatar + nome (sem caixa) */}
+          <View style={styles.userRow}>
+            <View style={[styles.avatar, { backgroundColor: headerAvatarBg }]}>
+              <Text
+                style={[styles.avatarText, { color: headerAvatarText }]}
+              >
+                {avatarLetter}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.userName,
+                {
+                  color: headerTextColor,
+                  fontSize: fs(18),
+                  textDecorationLine: "underline",
+                },
+              ]}
+            >
+              {nameToShow}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-	// Save display name
-	const handleSaveName = async () => {
-		if (!displayName.trim()) return;
-		setIsSaving(true);
-		const result = await updateProfile(displayName.trim());
-		setIsSaving(false);
-		if (result.success) {
-			Alert.alert("Sucesso", "Nome atualizado com sucesso!");
-		} else {
-			Alert.alert("Erro", result.error ?? "Nao foi possivel salvar.");
-		}
-	};
+      <View
+        style={[
+          styles.content,
+          {
+            backgroundColor: contentBg,
+            borderTopColor: contentBorder,
+            shadowColor: isDark ? "#000" : "#000",
+          },
+        ]}
+      >
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Título Preferências */}
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: textColor, fontSize: fs(20), marginBottom: 12 },
+            ]}
+          >
+            Preferências
+          </Text>
 
-	// Logout
-	const handleSignOut = () => {
-		signOut();
-		router.replace("/(auth)/login");
-	};
+            {/* Tamanho do texto */}
+          <Text style={[styles.label, { color: textColor, fontSize: fs(16) }]}>
+            Tamanho do texto
+          </Text>
+          <View style={styles.pillsRow}>
+            {FONT_MODE_OPTIONS.map(({ mode, label, icon }) => {
+              const selected = fontSizeMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[
+                    styles.pill,
+                    {
+                      backgroundColor: selected ? selectedBg : cardBg,
+                      borderColor: selected ? selectedBorder : borderColor,
+                    },
+                  ]}
+                  onPress={() => setFontSizeMode(mode)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.pillText,
+                      {
+                        color: textColor,
+                        fontSize: fs(14),
+                        fontWeight: selected ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {label} {icon}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-	// Dynamic styles based on preferences
-	const bg = highContrast ? "#000" : "#F9FAFB";
-	const textColor = highContrast ? "#FFF" : "#000";
-	const secondaryText = highContrast ? "#CCC" : "#6B7280";
-	const cardBg = highContrast ? "#1A1A1A" : "#FFF";
-	const inputBg = highContrast ? "#333" : "#FAFAFA";
-	const borderColor = highContrast ? "#555" : "#E5E7EB";
+          {/* Quantos minutos de foco? */}
+          <Text style={[styles.label, { color: textColor, fontSize: fs(16), marginTop: 20 }]}>
+            Quantos minutos de foco?
+          </Text>
+          <View style={styles.pillsRow}>
+            {FOCUS_OPTIONS.map((m) => {
+              const selected = focusMinutes === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[
+                    styles.pill,
+                    {
+                      backgroundColor: selected ? selectedBg : cardBg,
+                      borderColor: selected ? selectedBorder : borderColor,
+                    },
+                  ]}
+                  onPress={() => setFocusMinutes(m)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.pillText,
+                      {
+                        color: textColor,
+                        fontSize: fs(14),
+                        fontWeight: selected ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {m}m
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-	const fontSizeValue = fontSize === "small" ? 14 : fontSize === "large" ? 20 : 16;
-	const titleFontSize = fontSize === "small" ? 16 : fontSize === "large" ? 22 : 18;
+          {/* Quantos minutos de pausa? */}
+          <Text style={[styles.label, { color: textColor, fontSize: fs(16), marginTop: 20 }]}>
+            Quantos minutos de pausa?
+          </Text>
+          <View style={styles.pillsRow}>
+            {PAUSE_OPTIONS.map((m) => {
+              const selected = pauseMinutes === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[
+                    styles.pill,
+                    {
+                      backgroundColor: selected ? selectedBg : cardBg,
+                      borderColor: selected ? selectedBorder : borderColor,
+                    },
+                  ]}
+                  onPress={() => setPauseMinutes(m)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.pillText,
+                      {
+                        color: textColor,
+                        fontSize: fs(14),
+                        fontWeight: selected ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {m}m
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-	return (
-		<SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-			{/* Header */}
-			<View style={[styles.header, { backgroundColor: cardBg, borderBottomColor: borderColor }]}>
-				<TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-					<Text style={[styles.backButton, { color: textColor }]}>← Voltar</Text>
-				</TouchableOpacity>
-				<Text style={[styles.headerTitle, { color: textColor }]}>Meu Perfil</Text>
-				<View style={{ width: 60 }} />
-			</View>
+          {/* Aparência */}
+          <Text style={[styles.label, { color: textColor, fontSize: fs(16), marginTop: 20 }]}>
+            Aparência
+          </Text>
+          <View style={styles.pillsRow}>
+            {APPEARANCE_OPTIONS.map((opt) => {
+              const selected = appearanceMode === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[
+                    styles.pill,
+                    {
+                      backgroundColor: selected ? selectedBg : cardBg,
+                      borderColor: selected ? selectedBorder : borderColor,
+                    },
+                  ]}
+                  onPress={() => setAppearanceMode(opt.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.pillText,
+                      {
+                        color: textColor,
+                        fontSize: fs(14),
+                        fontWeight: selected ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-			<ScrollView
-				style={styles.scroll}
-				contentContainerStyle={styles.scrollContent}
-				showsVerticalScrollIndicator={false}
-			>
-				{/* Section: Meus dados */}
-				<Text style={[styles.sectionTitle, { color: textColor, fontSize: titleFontSize }]}>
-					Meus dados
-				</Text>
-				<View style={[styles.card, { backgroundColor: cardBg }]}>
-					<Text style={[styles.label, { color: secondaryText, fontSize: fontSizeValue }]}>
-						Email
-					</Text>
-					<Text style={[styles.value, { color: textColor, fontSize: fontSizeValue }]}>
-						{user?.primaryEmail ?? "—"}
-					</Text>
+          {/* Tema de cor */}
+          <Text style={[styles.label, { color: textColor, fontSize: fs(16), marginTop: 20 }]}>
+            Tema de cor
+          </Text>
+          <View style={styles.swatchesRow}>
+            {THEME_COLORS.map((color, i) => {
+              const selected = themeColorIndex === i;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setThemeColorIndex(i)}
+                  style={[
+                    styles.swatch,
+                    {
+                      backgroundColor: color,
+                      borderWidth: selected ? 2 : 0,
+                      borderColor: isDark ? "#ECEDEE" : "#111827",
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                />
+              );
+            })}
+          </View>
 
-					<Text style={[styles.label, { color: secondaryText, fontSize: fontSizeValue, marginTop: 16 }]}>
-						Nome de exibicao
-					</Text>
-					<TextInput
-						style={[
-							styles.input,
-							{
-								backgroundColor: inputBg,
-								color: textColor,
-								borderColor,
-								fontSize: fontSizeValue,
-							},
-						]}
-						value={displayName}
-						onChangeText={setDisplayName}
-						placeholder="Seu nome"
-						placeholderTextColor={secondaryText}
-					/>
-					<TouchableOpacity
-						style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-						onPress={handleSaveName}
-						disabled={isSaving}
-						activeOpacity={0.7}
-					>
-						{isSaving ? (
-							<ActivityIndicator color="#FFF" size="small" />
-						) : (
-							<Text style={[styles.saveButtonText, { fontSize: fontSizeValue }]}>Salvar</Text>
-						)}
-					</TouchableOpacity>
-				</View>
+          {/* Salvar preferências */}
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              { backgroundColor: isDark ? "#374151" : "#111827" },
+              isSaving && styles.saveButtonDisabled,
+            ]}
+            onPress={handleSavePreferences}
+            activeOpacity={0.8}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={[styles.saveButtonText, { fontSize: fs(16) }]}>
+                Salvar preferências
+              </Text>
+            )}
+          </TouchableOpacity>
 
-				{/* Section: Minhas necessidades */}
-				<Text style={[styles.sectionTitle, { color: textColor, fontSize: titleFontSize }]}>
-					Minhas necessidades
-				</Text>
-				<View style={[styles.card, { backgroundColor: cardBg }]}>
-					<Text style={[styles.cardDescription, { color: secondaryText, fontSize: fontSizeValue }]}>
-						Selecione as condicoes que se aplicam a voce:
-					</Text>
-					<View style={styles.chipsContainer}>
-						{CONDITIONS_LIST.map((condition) => {
-							const selected = selectedConditions.includes(condition);
-							return (
-								<TouchableOpacity
-									key={condition}
-									style={[
-										styles.chip,
-										{
-											backgroundColor: selected
-												? highContrast ? "#4A90D9" : "#DBEAFE"
-												: highContrast ? "#333" : "#F3F4F6",
-											borderColor: selected
-												? highContrast ? "#4A90D9" : "#93C5FD"
-												: borderColor,
-										},
-									]}
-									onPress={() => toggleCondition(condition)}
-									activeOpacity={0.7}
-								>
-									<Text
-										style={[
-											styles.chipText,
-											{
-												color: selected
-													? highContrast ? "#FFF" : "#1E40AF"
-													: textColor,
-												fontSize: fontSizeValue,
-											},
-										]}
-									>
-										{selected ? "✓ " : ""}
-										{condition}
-									</Text>
-								</TouchableOpacity>
-							);
-						})}
-					</View>
-				</View>
-
-				{/* Section: Acessibilidade */}
-				<Text style={[styles.sectionTitle, { color: textColor, fontSize: titleFontSize }]}>
-					Acessibilidade
-				</Text>
-				<View style={[styles.card, { backgroundColor: cardBg }]}>
-					{/* Font size */}
-					<Text style={[styles.label, { color: secondaryText, fontSize: fontSizeValue }]}>
-						Tamanho da fonte
-					</Text>
-					<View style={styles.fontSizeRow}>
-						{(["small", "medium", "large"] as FontSize[]).map((size) => (
-							<TouchableOpacity
-								key={size}
-								style={[
-									styles.fontSizeOption,
-									{
-										backgroundColor:
-											fontSize === size
-												? highContrast ? "#4A90D9" : "#000"
-												: highContrast ? "#333" : "#F3F4F6",
-										borderColor:
-											fontSize === size
-												? highContrast ? "#4A90D9" : "#000"
-												: borderColor,
-									},
-								]}
-								onPress={() => saveFontSize(size)}
-								activeOpacity={0.7}
-							>
-								<Text
-									style={{
-										color: fontSize === size ? "#FFF" : textColor,
-										fontWeight: fontSize === size ? "700" : "400",
-										fontSize: size === "small" ? 13 : size === "large" ? 17 : 15,
-									}}
-								>
-									{size === "small" ? "Pequeno" : size === "medium" ? "Medio" : "Grande"}
-								</Text>
-							</TouchableOpacity>
-						))}
-					</View>
-
-					{/* Summary mode */}
-					<View style={styles.toggleRow}>
-						<Text style={[styles.toggleLabel, { color: textColor, fontSize: fontSizeValue }]}>
-							Modo resumo
-						</Text>
-						<TouchableOpacity
-							style={[
-								styles.toggle,
-								{
-									backgroundColor: summaryMode
-										? highContrast ? "#4A90D9" : "#000"
-										: highContrast ? "#555" : "#D1D5DB",
-								},
-							]}
-							onPress={() => saveSummaryMode(!summaryMode)}
-							activeOpacity={0.7}
-						>
-							<View
-								style={[
-									styles.toggleKnob,
-									summaryMode && styles.toggleKnobActive,
-								]}
-							/>
-						</TouchableOpacity>
-					</View>
-
-					{/* High contrast */}
-					<View style={styles.toggleRow}>
-						<Text style={[styles.toggleLabel, { color: textColor, fontSize: fontSizeValue }]}>
-							Contraste alto
-						</Text>
-						<TouchableOpacity
-							style={[
-								styles.toggle,
-								{
-									backgroundColor: highContrast
-										? "#4A90D9"
-										: "#D1D5DB",
-								},
-							]}
-							onPress={() => saveHighContrast(!highContrast)}
-							activeOpacity={0.7}
-						>
-							<View
-								style={[
-									styles.toggleKnob,
-									highContrast && styles.toggleKnobActive,
-								]}
-							/>
-						</TouchableOpacity>
-					</View>
-				</View>
-
-				{/* Logout */}
-				<TouchableOpacity
-					style={styles.logoutButton}
-					onPress={handleSignOut}
-					activeOpacity={0.7}
-				>
-					<Text style={[styles.logoutText, { fontSize: fontSizeValue }]}>Sair da conta</Text>
-				</TouchableOpacity>
-
-				<View style={{ height: 40 }} />
-			</ScrollView>
-		</SafeAreaView>
-	);
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-	},
-	header: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		paddingHorizontal: 24,
-		paddingTop: 16,
-		paddingBottom: 16,
-		borderBottomWidth: 1,
-	},
-	backButton: {
-		fontSize: 16,
-		fontWeight: "600",
-	},
-	headerTitle: {
-		fontSize: 20,
-		fontWeight: "700",
-	},
-	scroll: {
-		flex: 1,
-	},
-	scrollContent: {
-		paddingHorizontal: 24,
-		paddingTop: 24,
-	},
-	sectionTitle: {
-		fontWeight: "700",
-		marginBottom: 12,
-		marginTop: 8,
-	},
-	card: {
-		borderRadius: 16,
-		padding: 20,
-		marginBottom: 24,
-		shadowColor: "#000",
-		shadowOffset: { width: 0, height: 1 },
-		shadowOpacity: 0.05,
-		shadowRadius: 4,
-		elevation: 2,
-	},
-	label: {
-		fontWeight: "500",
-		marginBottom: 6,
-	},
-	value: {
-		fontWeight: "600",
-	},
-	cardDescription: {
-		marginBottom: 16,
-		lineHeight: 22,
-	},
-	input: {
-		borderWidth: 1,
-		borderRadius: 12,
-		paddingHorizontal: 16,
-		paddingVertical: 12,
-		marginBottom: 12,
-	},
-	saveButton: {
-		backgroundColor: "#000",
-		borderRadius: 12,
-		paddingVertical: 14,
-		alignItems: "center",
-	},
-	saveButtonDisabled: {
-		opacity: 0.6,
-	},
-	saveButtonText: {
-		color: "#FFF",
-		fontWeight: "700",
-	},
-	chipsContainer: {
-		flexDirection: "row",
-		flexWrap: "wrap",
-		gap: 10,
-	},
-	chip: {
-		borderWidth: 1,
-		borderRadius: 20,
-		paddingHorizontal: 14,
-		paddingVertical: 8,
-	},
-	chipText: {
-		fontWeight: "500",
-	},
-	fontSizeRow: {
-		flexDirection: "row",
-		gap: 10,
-		marginBottom: 20,
-		marginTop: 4,
-	},
-	fontSizeOption: {
-		flex: 1,
-		borderWidth: 1,
-		borderRadius: 12,
-		paddingVertical: 10,
-		alignItems: "center",
-	},
-	toggleRow: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		marginBottom: 16,
-	},
-	toggleLabel: {
-		fontWeight: "500",
-	},
-	toggle: {
-		width: 52,
-		height: 30,
-		borderRadius: 15,
-		justifyContent: "center",
-		paddingHorizontal: 3,
-	},
-	toggleKnob: {
-		width: 24,
-		height: 24,
-		borderRadius: 12,
-		backgroundColor: "#FFF",
-	},
-	toggleKnobActive: {
-		alignSelf: "flex-end",
-	},
-	logoutButton: {
-		borderRadius: 12,
-		paddingVertical: 14,
-		alignItems: "center",
-		borderWidth: 1,
-		borderColor: "#DC2626",
-		marginTop: 8,
-	},
-	logoutText: {
-		color: "#DC2626",
-		fontWeight: "700",
-	},
+  container: {
+    flex: 1,
+  },
+  gradientHeader: {
+    paddingBottom: 28,
+  },
+  headerSafe: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontWeight: "700",
+  },
+  sairButton: {
+    fontWeight: "600",
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  userName: {
+    marginLeft: 16,
+    fontWeight: "600",
+  },
+  content: {
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    marginTop: -20,
+    paddingTop: 16,
+    paddingHorizontal: 24,
+    overflow: "hidden",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 16,
+  },
+  sectionTitle: {
+    fontWeight: "700",
+  },
+  label: {
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  pillsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pill: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillText: {
+  },
+  swatchesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 4,
+  },
+  swatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  saveButton: {
+    marginTop: 32,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: "#FFF",
+    fontWeight: "700",
+  },
 });

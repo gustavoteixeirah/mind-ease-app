@@ -1,439 +1,534 @@
+import ListItem from "@/components/ui/list-item";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFontScale } from "@/context/font-scale-context";
+import { useTasks, type Task } from "@/context/tasks-context";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Circle, Info, Leaf, Target } from "lucide-react-native";
+import React, { useMemo, useState } from "react";
 import {
-	Alert,
-	ScrollView,
-	StyleSheet,
-	Text,
-	TouchableOpacity,
-	View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// --- Storage keys (same as profile) ---
-const STORAGE_KEYS = {
-	FONT_SIZE: "@mindease_font_size",
-	SUMMARY_MODE: "@mindease_summary_mode",
-	HIGH_CONTRAST: "@mindease_high_contrast",
+type EnergyState = "calmo" | "presente" | "focado";
+
+const ENERGY_TO_COMPLEXITY: Record<EnergyState, string> = {
+  calmo: "Baixa",
+  presente: "Média",
+  focado: "Alta",
 };
 
-type FontSize = "small" | "medium" | "large";
-
-// --- Mock tasks ---
-type Priority = "high" | "medium" | "low";
-type Column = "now" | "later" | "whenever";
-
-interface MockTask {
-	id: string;
-	title: string;
-	description: string;
-	priority: Priority;
-	column: Column;
+function formatDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-const MOCK_TASKS: MockTask[] = [
-	{
-		id: "1",
-		title: "Revisar anotacoes de aula",
-		description: "Capitulo 3 e 4 de Engenharia de Software",
-		priority: "high",
-		column: "now",
-	},
-	{
-		id: "2",
-		title: "Entregar atividade de banco de dados",
-		description: "Modelagem ER do projeto final",
-		priority: "high",
-		column: "now",
-	},
-	{
-		id: "3",
-		title: "Ler artigo sobre acessibilidade",
-		description: "WCAG 2.1 e design inclusivo",
-		priority: "medium",
-		column: "later",
-	},
-	{
-		id: "4",
-		title: "Organizar pasta de estudos",
-		description: "Separar por materia e semestre",
-		priority: "low",
-		column: "later",
-	},
-	{
-		id: "5",
-		title: "Assistir palestra gravada",
-		description: "Semana de tecnologia FIAP",
-		priority: "low",
-		column: "whenever",
-	},
-];
+function formatDashboardDate(date: Date): string {
+  const weekday = date.toLocaleDateString("pt-BR", { weekday: "long" });
+  const dayMonth = date.toLocaleDateString("pt-BR", {
+    day: "numeric",
+    month: "long",
+  });
+  const capitalized =
+    weekday.charAt(0).toUpperCase() + weekday.slice(1).replace(/\./, "");
+  return `${capitalized} • ${dayMonth}`;
+}
 
-const PRIORITY_COLORS: Record<Priority, string> = {
-	high: "#EF4444",
-	medium: "#F59E0B",
-	low: "#22C55E",
-};
+function priorityOrder(p: "baixa" | "normal" | "alta"): number {
+  return p === "alta" ? 0 : p === "normal" ? 1 : 2;
+}
 
-const COLUMN_LABELS: Record<Column, string> = {
-	now: "Agora",
-	later: "Depois",
-	whenever: "Quando der",
-};
+function pickFocusTask(
+  tasks: Task[],
+  energy: EnergyState,
+): Task | null {
+  const targetComplexity = ENERGY_TO_COMPLEXITY[energy];
+  const incomplete = tasks.filter((t) => !t.completed);
+  const matching = incomplete.find((t) => t.complexity === targetComplexity);
+  return matching ?? incomplete[0] ?? null;
+}
 
-function getGreeting(): string {
-	const hour = new Date().getHours();
-	if (hour < 12) return "Bom dia";
-	if (hour < 18) return "Boa tarde";
-	return "Boa noite";
+function orderTodayTasksByEnergy(
+  tasks: Task[],
+  energy: EnergyState,
+): Task[] {
+  const targetComplexity = ENERGY_TO_COMPLEXITY[energy];
+  return [...tasks].sort((a, b) => {
+    const aMatches = a.complexity === targetComplexity ? 0 : 1;
+    const bMatches = b.complexity === targetComplexity ? 0 : 1;
+    if (aMatches !== bMatches) return aMatches - bMatches;
+    const aDone = a.completed ? 1 : 0;
+    const bDone = b.completed ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return priorityOrder(a.priority) - priorityOrder(b.priority);
+  });
 }
 
 export default function DashboardScreen() {
-	const { user } = useAuth();
-	const router = useRouter();
+  const { user } = useAuth();
+  const router = useRouter();
+  const navigation = useNavigation();
+  const { getTasksByDate, toggleCompleted } = useTasks();
+  const colorScheme = useColorScheme() ?? "light";
+  const isDark = colorScheme === "dark";
+  const { fs } = useFontScale();
 
-	// Accessibility preferences (loaded from AsyncStorage)
-	const [fontSize, setFontSize] = useState<FontSize>("medium");
-	const [summaryMode, setSummaryMode] = useState(false);
-	const [highContrast, setHighContrast] = useState(false);
+  const [energy, setEnergy] = useState<EnergyState>("presente");
+  const [showEnergyTooltip, setShowEnergyTooltip] = useState(false);
 
-	// Load preferences on mount and on focus
-	const loadPreferences = useCallback(async () => {
-		try {
-			const [savedFont, savedSummary, savedContrast] = await Promise.all([
-				AsyncStorage.getItem(STORAGE_KEYS.FONT_SIZE),
-				AsyncStorage.getItem(STORAGE_KEYS.SUMMARY_MODE),
-				AsyncStorage.getItem(STORAGE_KEYS.HIGH_CONTRAST),
-			]);
-			if (savedFont) setFontSize(savedFont as FontSize);
-			if (savedSummary !== null) setSummaryMode(savedSummary === "true");
-			if (savedContrast !== null) setHighContrast(savedContrast === "true");
-		} catch (e) {
-			console.warn("Failed to load preferences:", e);
-		}
-	}, []);
+  const todayKey = formatDateKey(new Date());
+  const tasksForToday = useMemo(
+    () => getTasksByDate(todayKey),
+    [getTasksByDate, todayKey],
+  );
 
-	useEffect(() => {
-		loadPreferences();
-	}, [loadPreferences]);
+  const focusTask = useMemo(
+    () => pickFocusTask(tasksForToday, energy),
+    [tasksForToday, energy],
+  );
+  const todayTasksOrdered = useMemo(
+    () => orderTodayTasksByEnergy(tasksForToday, energy),
+    [tasksForToday, energy],
+  );
 
-	// Quick-settings handlers (local + persist)
-	const cycleFontSize = async () => {
-		const next: FontSize =
-			fontSize === "small" ? "medium" : fontSize === "medium" ? "large" : "small";
-		setFontSize(next);
-		await AsyncStorage.setItem(STORAGE_KEYS.FONT_SIZE, next);
-	};
+  const textColor = useThemeColor({}, "text");
+  const secondaryText = useThemeColor({}, "icon");
+  const themeAccent = useThemeAccent();
 
-	const toggleSummary = async () => {
-		const next = !summaryMode;
-		setSummaryMode(next);
-		await AsyncStorage.setItem(STORAGE_KEYS.SUMMARY_MODE, String(next));
-	};
+  const contentBg = isDark ? Colors.dark.background : "#fff";
+  const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const primaryButtonBg = isDark ? "#374151" : "#111827";
 
-	const toggleContrast = async () => {
-		const next = !highContrast;
-		setHighContrast(next);
-		await AsyncStorage.setItem(STORAGE_KEYS.HIGH_CONTRAST, String(next));
-	};
+  const headerGradientColors = isDark
+    ? themeAccent.gradientDark
+    : themeAccent.gradient;
+  const headerTextColor = "#fff";
+  const headerSecondaryColor = "rgba(255,255,255,0.9)";
+  const headerPillBg = "rgba(255,255,255,0.2)";
+  const headerPillSelectedBg = "rgba(255,255,255,0.4)";
+  const headerPillBorder = "rgba(255,255,255,0.4)";
+  const headerAvatarBg = "rgba(255,255,255,0.25)";
+  const headerAvatarText = "#fff";
 
-	// Dynamic theming
-	const bg = highContrast ? "#000" : "#F9FAFB";
-	const textColor = highContrast ? "#FFF" : "#000";
-	const secondaryText = highContrast ? "#CCC" : "#6B7280";
-	const cardBg = highContrast ? "#1A1A1A" : "#FFF";
-	const borderColor = highContrast ? "#555" : "#E5E7EB";
-	const accentBg = highContrast ? "#4A90D9" : "#000";
+  const displayName =
+    (user?.displayName || user?.primaryEmail || "usuario")
+      .split(/[@.]/)[0]
+      .trim() || "usuario";
+  const firstName =
+    displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
+  const avatarLetter = firstName.charAt(0);
+  const dateLabel = formatDashboardDate(new Date());
 
-	const fontSizeValue = fontSize === "small" ? 14 : fontSize === "large" ? 20 : 16;
-	const titleFontSize = fontSize === "small" ? 18 : fontSize === "large" ? 28 : 24;
-	const sectionFontSize = fontSize === "small" ? 15 : fontSize === "large" ? 20 : 17;
+  const goToFocusMode = (task: Task) => {
+    (
+      navigation.getParent() as
+        | { navigate: (name: string, params?: object) => void }
+        | undefined
+    )?.navigate("FocusMode", {
+      task: {
+        id: task.id,
+        title: task.title,
+        complexity: task.complexity,
+        time: task.time,
+        subtasks: task.subtasks?.map((st) => ({ id: st.id, text: st.text })),
+      },
+    });
+  };
 
-	const fontLabel = fontSize === "small" ? "Pequeno" : fontSize === "large" ? "Grande" : "Medio";
+  const goToAllTasks = () => {
+    navigation.navigate("Tarefas" as never);
+  };
 
-	const displayName = user?.displayName || user?.primaryEmail || "usuario";
+  const goToProfile = () => {
+    router.push("/(app)/profile");
+  };
 
-	const tasksByColumn = (col: Column) => MOCK_TASKS.filter((t) => t.column === col);
+  const goToEditTask = (task: Task) => {
+    (navigation as { navigate: (name: string, params?: object) => void }).navigate("AddTask", { taskId: task.id, mode: "edit" });
+  };
 
-	const renderTaskCard = (task: MockTask) => (
-		<TouchableOpacity
-			key={task.id}
-			style={[styles.taskCard, { backgroundColor: cardBg }]}
-			onPress={() =>
-				Alert.alert(
-					task.title,
-					`${task.description}\n\nPrioridade: ${task.priority === "high" ? "Alta" : task.priority === "medium" ? "Media" : "Baixa"}`,
-				)
-			}
-			activeOpacity={0.7}
-		>
-			<View style={styles.taskCardHeader}>
-				<View
-					style={[
-						styles.priorityDot,
-						{ backgroundColor: PRIORITY_COLORS[task.priority] },
-					]}
-				/>
-				<Text
-					style={[styles.taskTitle, { color: textColor, fontSize: fontSizeValue }]}
-					numberOfLines={2}
-				>
-					{task.title}
-				</Text>
-			</View>
-			{!summaryMode && (
-				<Text
-					style={[styles.taskDescription, { color: secondaryText, fontSize: fontSizeValue - 2 }]}
-					numberOfLines={2}
-				>
-					{task.description}
-				</Text>
-			)}
-		</TouchableOpacity>
-	);
+  return (
+    <View style={[styles.container, { backgroundColor: contentBg }]}>
+      <LinearGradient
+        colors={headerGradientColors}
+        style={styles.gradientHeader}
+      >
+        <SafeAreaView edges={["top"]} style={styles.headerSafe}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              onPress={goToProfile}
+              style={[styles.avatar, { backgroundColor: headerAvatarBg }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.avatarText, { color: headerAvatarText }]}>
+                {avatarLetter}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.headerTextWrap}>
+              <Text
+                style={[
+                  styles.greeting,
+                  { color: headerTextColor, fontSize: fs(22) },
+                ]}
+              >
+                Olá, {firstName}
+              </Text>
+              <Text
+                style={[
+                  styles.dateLabel,
+                  { color: headerSecondaryColor, fontSize: fs(14) },
+                ]}
+              >
+                {dateLabel}
+              </Text>
+            </View>
+          </View>
 
-	const renderColumn = (col: Column) => {
-		const tasks = tasksByColumn(col);
-		return (
-			<View key={col} style={styles.column}>
-				<Text style={[styles.columnTitle, { color: textColor, fontSize: fontSizeValue }]}>
-					{COLUMN_LABELS[col]}
-				</Text>
-				{tasks.map(renderTaskCard)}
-			</View>
-		);
-	};
+          <View style={styles.energySection}>
+            <View style={styles.energyTitleRow}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: headerTextColor, fontSize: fs(16) },
+                ]}
+              >
+                Como está sua energia agora?
+              </Text>
+              <View style={styles.energyInfoWrap}>
+                <TouchableOpacity
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => setShowEnergyTooltip((v) => !v)}
+                >
+                  <Info size={16} color={headerSecondaryColor} />
+                </TouchableOpacity>
+                {showEnergyTooltip && (
+                  <View style={styles.energyTooltipWrap}>
+                    <Text style={[styles.energyTooltipText, { fontSize: fs(13) }]}>
+                      Usamos isso para sugerir tarefas mais compatíveis com seu ritmo.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={styles.pillRow}>
+              <TouchableOpacity
+                style={[
+                  styles.pill,
+                  {
+                    borderColor: headerPillBorder,
+                    backgroundColor:
+                      energy === "calmo" ? headerPillSelectedBg : headerPillBg,
+                  },
+                ]}
+                onPress={() => setEnergy("calmo")}
+                activeOpacity={0.7}
+              >
+                <Leaf size={18} color={headerTextColor} />
+                <Text
+                  style={[
+                    styles.pillLabel,
+                    { color: headerTextColor, fontSize: fs(14) },
+                  ]}
+                >
+                  Calmo
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.pill,
+                  {
+                    borderColor: headerPillBorder,
+                    backgroundColor:
+                      energy === "presente"
+                        ? headerPillSelectedBg
+                        : headerPillBg,
+                  },
+                ]}
+                onPress={() => setEnergy("presente")}
+                activeOpacity={0.7}
+              >
+                <Circle size={18} color={headerTextColor} strokeWidth={2} />
+                <Text
+                  style={[
+                    styles.pillLabel,
+                    { color: headerTextColor, fontSize: fs(14) },
+                  ]}
+                >
+                  Presente
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.pill,
+                  {
+                    borderColor: headerPillBorder,
+                    backgroundColor:
+                      energy === "focado" ? headerPillSelectedBg : headerPillBg,
+                  },
+                ]}
+                onPress={() => setEnergy("focado")}
+                activeOpacity={0.7}
+              >
+                <Target size={18} color={headerTextColor} />
+                <Text
+                  style={[
+                    styles.pillLabel,
+                    { color: headerTextColor, fontSize: fs(14) },
+                  ]}
+                >
+                  Focado
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-	return (
-		<SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-			{/* Header */}
-			<View style={[styles.header, { backgroundColor: cardBg, borderBottomColor: borderColor }]}>
-				<Text style={[styles.headerTitle, { color: textColor }]}>MindEase</Text>
-				<TouchableOpacity
-					onPress={() => router.push("/(app)/profile")}
-					activeOpacity={0.7}
-					style={[styles.profileButton, { borderColor }]}
-				>
-					<Text style={[styles.profileButtonText, { color: textColor }]}>
-						{displayName.charAt(0).toUpperCase()}
-					</Text>
-				</TouchableOpacity>
-			</View>
+      <View
+        style={[
+          styles.content,
+          {
+            backgroundColor: contentBg,
+            borderTopColor: contentBorder,
+            shadowColor: isDark ? "#000" : "#000",
+          },
+        ]}
+      >
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.section}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: textColor, fontSize: fs(18) },
+              ]}
+            >
+              Foque agora
+            </Text>
+            <Text
+              style={[
+                styles.sectionSubtitle,
+                { color: secondaryText, fontSize: fs(14) },
+              ]}
+            >
+              Escolhida para seu momento.
+            </Text>
+            {focusTask ? (
+              <View style={styles.taskCardWrap}>
+                <ListItem
+                  title={focusTask.title}
+                  completed={focusTask.completed}
+                  complexity={focusTask.complexity}
+                  priority={focusTask.priority}
+                  time={focusTask.time}
+                  showFocusIcon
+                  onCheckPress={() => toggleCompleted(focusTask.id)}
+                  onCardPress={() => goToEditTask(focusTask)}
+                  onFocusPress={() => goToFocusMode(focusTask)}
+                />
+              </View>
+            ) : (
+              <Text
+                style={[
+                  styles.emptyHint,
+                  { color: secondaryText, fontSize: fs(14) },
+                ]}
+              >
+                Nenhuma tarefa com essa dificuldade hoje.
+              </Text>
+            )}
+          </View>
 
-			<ScrollView
-				style={styles.scroll}
-				contentContainerStyle={styles.scrollContent}
-				showsVerticalScrollIndicator={false}
-			>
-				{/* Greeting */}
-				<Text style={[styles.greeting, { color: textColor, fontSize: titleFontSize }]}>
-					{getGreeting()}, {displayName}!
-				</Text>
+          <View style={styles.section}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: textColor, fontSize: fs(18) },
+              ]}
+            >
+              Hoje
+            </Text>
+            {todayTasksOrdered.map((task) => (
+              <View key={task.id} style={styles.taskCardWrap}>
+                <ListItem
+                  title={task.title}
+                  completed={task.completed}
+                  complexity={task.complexity}
+                  priority={task.priority}
+                  time={task.time}
+                  showFocusIcon={!task.completed}
+                  onCheckPress={() => toggleCompleted(task.id)}
+                  onCardPress={() => goToEditTask(task)}
+                  onFocusPress={() => !task.completed && goToFocusMode(task)}
+                />
+              </View>
+            ))}
+          </View>
 
-				{/* Focus mode button */}
-				<TouchableOpacity
-					style={[styles.focusButton, { backgroundColor: accentBg }]}
-					onPress={() => Alert.alert("Modo Foco", "Em breve!")}
-					activeOpacity={0.7}
-				>
-					<Text style={[styles.focusButtonText, { fontSize: fontSizeValue + 2 }]}>
-						Modo Foco
-					</Text>
-				</TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.verTodasButton, { backgroundColor: primaryButtonBg }]}
+            onPress={goToAllTasks}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.verTodasText}>Ver todas</Text>
+          </TouchableOpacity>
 
-				{/* Quick settings */}
-				<Text style={[styles.sectionTitle, { color: textColor, fontSize: sectionFontSize }]}>
-					Ajustes rapidos
-				</Text>
-				<View style={[styles.settingsRow, { backgroundColor: cardBg }]}>
-					<TouchableOpacity
-						style={[styles.settingChip, { borderColor }]}
-						onPress={cycleFontSize}
-						activeOpacity={0.7}
-					>
-						<Text style={[styles.settingChipLabel, { color: secondaryText, fontSize: fontSizeValue - 2 }]}>
-							Fonte
-						</Text>
-						<Text style={[styles.settingChipValue, { color: textColor, fontSize: fontSizeValue }]}>
-							{fontLabel}
-						</Text>
-					</TouchableOpacity>
-
-					<TouchableOpacity
-						style={[
-							styles.settingChip,
-							{
-								borderColor: summaryMode ? accentBg : borderColor,
-								backgroundColor: summaryMode
-									? highContrast ? "#1A3A5C" : "#F0F0F0"
-									: "transparent",
-							},
-						]}
-						onPress={toggleSummary}
-						activeOpacity={0.7}
-					>
-						<Text style={[styles.settingChipLabel, { color: secondaryText, fontSize: fontSizeValue - 2 }]}>
-							Resumo
-						</Text>
-						<Text style={[styles.settingChipValue, { color: textColor, fontSize: fontSizeValue }]}>
-							{summaryMode ? "Ligado" : "Desligado"}
-						</Text>
-					</TouchableOpacity>
-
-					<TouchableOpacity
-						style={[
-							styles.settingChip,
-							{
-								borderColor: highContrast ? "#4A90D9" : borderColor,
-								backgroundColor: highContrast ? "#1A3A5C" : "transparent",
-							},
-						]}
-						onPress={toggleContrast}
-						activeOpacity={0.7}
-					>
-						<Text style={[styles.settingChipLabel, { color: secondaryText, fontSize: fontSizeValue - 2 }]}>
-							Contraste
-						</Text>
-						<Text style={[styles.settingChipValue, { color: textColor, fontSize: fontSizeValue }]}>
-							{highContrast ? "Alto" : "Normal"}
-						</Text>
-					</TouchableOpacity>
-				</View>
-
-				{/* Tasks kanban */}
-				<Text style={[styles.sectionTitle, { color: textColor, fontSize: sectionFontSize }]}>
-					Minhas Tarefas
-				</Text>
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					contentContainerStyle={styles.kanbanContainer}
-				>
-					{(["now", "later", "whenever"] as Column[]).map(renderColumn)}
-				</ScrollView>
-
-				<View style={{ height: 40 }} />
-			</ScrollView>
-		</SafeAreaView>
-	);
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-	},
-	header: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		paddingHorizontal: 24,
-		paddingTop: 16,
-		paddingBottom: 16,
-		borderBottomWidth: 1,
-	},
-	headerTitle: {
-		fontSize: 20,
-		fontWeight: "700",
-	},
-	profileButton: {
-		width: 36,
-		height: 36,
-		borderRadius: 18,
-		borderWidth: 1,
-		alignItems: "center",
-		justifyContent: "center",
-	},
-	profileButtonText: {
-		fontSize: 16,
-		fontWeight: "700",
-	},
-	scroll: {
-		flex: 1,
-	},
-	scrollContent: {
-		paddingHorizontal: 24,
-		paddingTop: 24,
-	},
-	greeting: {
-		fontWeight: "700",
-		marginBottom: 20,
-	},
-	focusButton: {
-		borderRadius: 16,
-		paddingVertical: 18,
-		alignItems: "center",
-		marginBottom: 28,
-	},
-	focusButtonText: {
-		color: "#FFF",
-		fontWeight: "700",
-	},
-	sectionTitle: {
-		fontWeight: "700",
-		marginBottom: 12,
-	},
-	settingsRow: {
-		flexDirection: "row",
-		gap: 10,
-		marginBottom: 28,
-		borderRadius: 16,
-		padding: 12,
-	},
-	settingChip: {
-		flex: 1,
-		borderWidth: 1,
-		borderRadius: 12,
-		paddingVertical: 10,
-		paddingHorizontal: 8,
-		alignItems: "center",
-	},
-	settingChipLabel: {
-		fontWeight: "500",
-		marginBottom: 2,
-	},
-	settingChipValue: {
-		fontWeight: "700",
-	},
-	kanbanContainer: {
-		gap: 12,
-		paddingBottom: 8,
-	},
-	column: {
-		width: 200,
-	},
-	columnTitle: {
-		fontWeight: "700",
-		marginBottom: 10,
-		textAlign: "center",
-	},
-	taskCard: {
-		borderRadius: 12,
-		padding: 14,
-		marginBottom: 10,
-		shadowColor: "#000",
-		shadowOffset: { width: 0, height: 1 },
-		shadowOpacity: 0.05,
-		shadowRadius: 3,
-		elevation: 2,
-	},
-	taskCardHeader: {
-		flexDirection: "row",
-		alignItems: "center",
-		gap: 8,
-	},
-	priorityDot: {
-		width: 10,
-		height: 10,
-		borderRadius: 5,
-	},
-	taskTitle: {
-		fontWeight: "600",
-		flex: 1,
-	},
-	taskDescription: {
-		marginTop: 6,
-		lineHeight: 18,
-	},
+  container: {
+    flex: 1,
+  },
+  gradientHeader: {
+    paddingBottom: 28,
+  },
+  headerSafe: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  headerTextWrap: {
+    marginLeft: 14,
+  },
+  greeting: {
+    fontWeight: "700",
+  },
+  dateLabel: {
+    marginTop: 2,
+  },
+  energySection: {
+    marginBottom: 0,
+  },
+  content: {
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    marginTop: -20,
+    paddingTop: 16,
+    paddingHorizontal: 24,
+    overflow: "hidden",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  energyTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  energyInfoWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  energyTooltipWrap: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    maxWidth: 220,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  energyTooltipText: {
+    color: "#111827",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    fontWeight: "700",
+  },
+  sectionSubtitle: {
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  pillRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  pill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pillLabel: {
+    fontWeight: "600",
+  },
+  section: {
+    marginBottom: 24,
+  },
+  taskCardWrap: {
+    marginBottom: 0,
+  },
+  emptyHint: {
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  verTodasButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    minWidth: 160,
+    alignItems: "center",
+  },
+  verTodasText: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 16,
+  },
 });
