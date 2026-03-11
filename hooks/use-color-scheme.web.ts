@@ -1,21 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useColorScheme as useRNColorScheme } from 'react-native';
+import { useAppearance } from "@/context/appearance-context";
+import { useEffect, useState } from "react";
+import { useColorScheme as useRNColorScheme } from "react-native";
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * Web: suporta hidratação estática e preferência de aparência (light/dark/system).
  */
 export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
+  const systemScheme = useRNColorScheme();
+  const { appearance } = useAppearance();
 
   useEffect(() => {
     setHasHydrated(true);
   }, []);
 
-  const colorScheme = useRNColorScheme();
+  if (!hasHydrated) return "light";
 
-  if (hasHydrated) {
-    return colorScheme;
+  if (appearance === "system") {
+    return systemScheme ?? "light";
   }
-
-  return 'light';
+  return appearance;
 }

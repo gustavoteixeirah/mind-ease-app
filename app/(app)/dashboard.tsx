@@ -2,7 +2,9 @@ import ListItem from "@/components/ui/list-item";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { useFontScale } from "@/context/font-scale-context";
+import { useTasks, type Task } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,70 +22,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type EnergyState = "calmo" | "presente" | "focado";
 
-type DashboardTask = {
-  id: string;
-  title: string;
-  completed: boolean;
-  complexity: string;
-  priority: "baixa" | "normal" | "alta";
-  time: string;
-  isFocusTask?: boolean;
-  date: string;
-};
-
 const ENERGY_TO_COMPLEXITY: Record<EnergyState, string> = {
   calmo: "Baixa",
   presente: "Média",
   focado: "Alta",
 };
-
-const TODAY_TASKS_POOL: DashboardTask[] = [
-  {
-    id: "1",
-    title: "Escrever dissertação",
-    completed: false,
-    complexity: "Média",
-    priority: "alta",
-    time: "1h30m",
-    date: "2026-03-12",
-  },
-  {
-    id: "2",
-    title: "Ler 3 capítulos",
-    completed: false,
-    complexity: "Baixa",
-    priority: "normal",
-    time: "2h",
-    date: "2026-03-11",
-  },
-  {
-    id: "3",
-    title: "Escrever e-mails",
-    completed: true,
-    complexity: "Baixa",
-    priority: "baixa",
-    time: "30m",
-    date: "2026-03-11",
-  },
-  {
-    id: "4",
-    title: "Revisar apresentação",
-    completed: false,
-    complexity: "Média",
-    priority: "normal",
-    time: "45m",
-    date: "2026-03-15",
-  },
-  {
-    id: "5",
-    title: "Entregar relatório final",
-    completed: false,
-    complexity: "Alta",
-    priority: "alta",
-    time: "2h",
-    date: "2026-03-11",
-  },
-];
 
 function formatDateKey(d: Date): string {
   const y = d.getFullYear();
@@ -108,9 +51,9 @@ function priorityOrder(p: "baixa" | "normal" | "alta"): number {
 }
 
 function pickFocusTask(
-  tasks: DashboardTask[],
+  tasks: Task[],
   energy: EnergyState,
-): DashboardTask | null {
+): Task | null {
   const targetComplexity = ENERGY_TO_COMPLEXITY[energy];
   const incomplete = tasks.filter((t) => !t.completed);
   const matching = incomplete.find((t) => t.complexity === targetComplexity);
@@ -118,9 +61,9 @@ function pickFocusTask(
 }
 
 function orderTodayTasksByEnergy(
-  tasks: DashboardTask[],
+  tasks: Task[],
   energy: EnergyState,
-): DashboardTask[] {
+): Task[] {
   const targetComplexity = ENERGY_TO_COMPLEXITY[energy];
   return [...tasks].sort((a, b) => {
     const aMatches = a.complexity === targetComplexity ? 0 : 1;
@@ -137,16 +80,18 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
+  const { getTasksByDate, toggleCompleted } = useTasks();
   const colorScheme = useColorScheme() ?? "light";
   const isDark = colorScheme === "dark";
   const { fs } = useFontScale();
 
   const [energy, setEnergy] = useState<EnergyState>("presente");
 
-  const tasksForToday = useMemo(() => {
-    const todayKey = formatDateKey(new Date());
-    return TODAY_TASKS_POOL.filter((t) => t.date === todayKey);
-  }, []);
+  const todayKey = formatDateKey(new Date());
+  const tasksForToday = useMemo(
+    () => getTasksByDate(todayKey),
+    [getTasksByDate, todayKey],
+  );
 
   const focusTask = useMemo(
     () => pickFocusTask(tasksForToday, energy),
@@ -159,14 +104,15 @@ export default function DashboardScreen() {
 
   const textColor = useThemeColor({}, "text");
   const secondaryText = useThemeColor({}, "icon");
+  const themeAccent = useThemeAccent();
 
   const contentBg = isDark ? Colors.dark.background : "#fff";
   const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
-  const buttonDarkBg = isDark ? "#1E1E1E" : "#1E1E1E";
+  const primaryButtonBg = isDark ? "#374151" : "#111827";
 
   const headerGradientColors = isDark
-    ? (["#1a1a2e", "#16213e", "#0f3460"] as [string, string, ...string[]])
-    : (["#667eea", "#764ba2", "#5a67d8"] as [string, string, ...string[]]);
+    ? themeAccent.gradientDark
+    : themeAccent.gradient;
   const headerTextColor = "#fff";
   const headerSecondaryColor = "rgba(255,255,255,0.9)";
   const headerPillBg = "rgba(255,255,255,0.2)";
@@ -184,7 +130,7 @@ export default function DashboardScreen() {
   const avatarLetter = firstName.charAt(0);
   const dateLabel = formatDashboardDate(new Date());
 
-  const goToFocusMode = (task: DashboardTask) => {
+  const goToFocusMode = (task: Task) => {
     (
       navigation.getParent() as
         | { navigate: (name: string, params?: object) => void }
@@ -195,6 +141,7 @@ export default function DashboardScreen() {
         title: task.title,
         complexity: task.complexity,
         time: task.time,
+        subtasks: task.subtasks?.map((st) => ({ id: st.id, text: st.text })),
       },
     });
   };
@@ -375,7 +322,7 @@ export default function DashboardScreen() {
                   priority={focusTask.priority}
                   time={focusTask.time}
                   showFocusIcon
-                  onPress={() => {}}
+                  onPress={() => toggleCompleted(focusTask.id)}
                   onFocusPress={() => goToFocusMode(focusTask)}
                 />
               </View>
@@ -409,7 +356,7 @@ export default function DashboardScreen() {
                   priority={task.priority}
                   time={task.time}
                   showFocusIcon={!task.completed}
-                  onPress={() => {}}
+                  onPress={() => toggleCompleted(task.id)}
                   onFocusPress={() => !task.completed && goToFocusMode(task)}
                 />
               </View>
@@ -417,7 +364,7 @@ export default function DashboardScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.verTodasButton, { backgroundColor: buttonDarkBg }]}
+            style={[styles.verTodasButton, { backgroundColor: primaryButtonBg }]}
             onPress={goToAllTasks}
             activeOpacity={0.8}
           >
@@ -440,6 +387,7 @@ const styles = StyleSheet.create({
   },
   headerSafe: {
     paddingHorizontal: 24,
+    paddingTop: 16,
   },
   headerRow: {
     flexDirection: "row",
@@ -487,6 +435,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingTop: 24,
     paddingBottom: 16,
   },
   energyTitleRow: {
@@ -531,7 +480,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   verTodasButton: {
-    alignSelf: "center",
+    alignSelf: "flex-start",
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 12,

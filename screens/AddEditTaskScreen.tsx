@@ -1,6 +1,8 @@
 import { Colors } from "@/constants/theme";
 import { useFontScale } from "@/context/font-scale-context";
+import { useTasks, type TaskPriority } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -87,15 +89,25 @@ function parseEstimatedMinutes(value: string): number | null {
   return null;
 }
 
+function minutesToTimeString(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${m}m` : `${h}h`;
+}
+
 export default function AddEditTaskScreen() {
   const params = useLocalSearchParams<{ taskId?: string }>();
   const navigation = useNavigation();
+  const { addTask, updateTask } = useTasks();
   const colorScheme = useColorScheme() ?? "light";
   const isDark = colorScheme === "dark";
+  const themeAccent = useThemeAccent();
 
   const textColor = useThemeColor({}, "text");
   const iconColor = useThemeColor({}, "icon");
   const strongTextColor = isDark ? "#ECEDEE" : "#11181C";
+  const chipSelectedBg = isDark ? themeAccent.buttonBg : themeAccent.accent;
 
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState<(typeof WHEN_OPTIONS)[number]["id"]>("hoje");
@@ -148,6 +160,61 @@ export default function AddEditTaskScreen() {
     setTags((prev) => prev.filter((x) => x !== tag));
   };
 
+  const getDateKeyFromWhen = (): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (when === "escolher" && customDate) return formatDateKey(customDate);
+    if (when === "amanha") {
+      const d = new Date(today);
+      d.setDate(d.getDate() + 1);
+      return formatDateKey(d);
+    }
+    return formatDateKey(today);
+  };
+
+  const handleSaveTask = () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+    const dateKey = getDateKeyFromWhen();
+    const effortToComplexity: Record<string, string> = {
+      leve: "Baixa",
+      normal: "Média",
+      exigente: "Alta",
+    };
+    const complexity = effortToComplexity[effort] ?? "Média";
+    const taskPriority: TaskPriority =
+      (priority === "" ? "normal" : priority) as TaskPriority;
+    const mins = parseEstimatedMinutes(estimatedTime);
+    const time = mins !== null ? minutesToTimeString(mins) : "30m";
+    if (isEdit && params?.taskId) {
+      updateTask(params.taskId, {
+        title: trimmedTitle,
+        date: dateKey,
+        complexity,
+        priority: taskPriority,
+        time,
+        tags: tags.length > 0 ? tags : undefined,
+        description: description.trim() || undefined,
+        subtasks: subtasks.length > 0 ? subtasks : undefined,
+      });
+    } else {
+      addTask({
+        title: trimmedTitle,
+        completed: false,
+        complexity,
+        priority: taskPriority,
+        time,
+        date: dateKey,
+        tags: tags.length > 0 ? tags : undefined,
+        focusModeEnabled: true,
+        description: description.trim() || undefined,
+        subtasks: subtasks.length > 0 ? subtasks : undefined,
+      });
+    }
+    if (navigation.canGoBack()) navigation.goBack();
+    else (navigation.getParent() as { navigate: (name: string) => void } | undefined)?.navigate("Tarefas");
+  };
+
   const estimatedMinutes = parseEstimatedMinutes(estimatedTime);
   const isExigente = effort === "exigente";
   const isAltaAgora = priority === "alta" && when === "agora";
@@ -162,8 +229,8 @@ export default function AddEditTaskScreen() {
   };
 
   const headerGradientColors = isDark
-    ? (["#1a1a2e", "#16213e", "#0f3460"] as const)
-    : (["#667eea", "#764ba2", "#5a67d8"] as const);
+    ? themeAccent.gradientDark
+    : themeAccent.gradient;
 
   const contentBg = isDark ? Colors.dark.background : "#fff";
   const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
@@ -244,7 +311,7 @@ export default function AddEditTaskScreen() {
                   style={[
                     styles.chip,
                     when === opt.id && {
-                      backgroundColor: isDark ? "#5a67d8" : "#667eea",
+                      backgroundColor: chipSelectedBg,
                     },
                     !(when === opt.id) && {
                       backgroundColor: isDark ? "#252530" : "#f0f0f0",
@@ -285,7 +352,7 @@ export default function AddEditTaskScreen() {
                   style={[
                     styles.chip,
                     effort === opt.id && {
-                      backgroundColor: isDark ? "#5a67d8" : "#667eea",
+                      backgroundColor: chipSelectedBg,
                     },
                     !(effort === opt.id) && {
                       backgroundColor: isDark ? "#252530" : "#f0f0f0",
@@ -315,7 +382,7 @@ export default function AddEditTaskScreen() {
                   { borderBottomColor: textColor },
                 ]}
               >
-                <Plus size={20} color={isDark ? "#9BA1A6" : "#667eea"} />
+                <Plus size={20} color={isDark ? "#9BA1A6" : themeAccent.accent} />
                 <Text style={[styles.subtaskTriggerText, { color: textColor }]}>
                   Criar sub-tarefa
                 </Text>
@@ -422,7 +489,7 @@ export default function AddEditTaskScreen() {
                         style={[
                           styles.chip,
                           priority === opt.id && {
-                            backgroundColor: isDark ? "#5a67d8" : "#667eea",
+                            backgroundColor: chipSelectedBg,
                           },
                           !(priority === opt.id) && {
                             backgroundColor: isDark ? "#252530" : "#f0f0f0",
@@ -566,7 +633,7 @@ export default function AddEditTaskScreen() {
                     styles.createTaskFocusButton,
                     {
                       backgroundColor: isDark ? "#252530" : "#fff",
-                      borderColor: isDark ? "#444" : "#e0e0e0",
+                      borderColor: themeAccent.selectedBorder,
                     },
                   ]}
                   activeOpacity={0.8}
@@ -587,9 +654,10 @@ export default function AddEditTaskScreen() {
               style={[
                 styles.createTaskButton,
                 {
-                  backgroundColor: isDark ? "#1a1a1a" : "#111827",
+                  backgroundColor: isDark ? "#374151" : "#111827",
                 },
               ]}
+              onPress={handleSaveTask}
               activeOpacity={0.8}
             >
               <Text style={styles.createTaskButtonText}>

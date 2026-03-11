@@ -1,9 +1,14 @@
 import type { FontSizeMode } from "@/constants/theme";
 import { FONT_SCALE } from "@/constants/theme";
+import {
+  PreferenceKeys,
+  getPreferenceString,
+} from "@/lib/storage";
 import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -18,8 +23,19 @@ type FontScaleContextValue = {
 
 const FontScaleContext = createContext<FontScaleContextValue | null>(null);
 
+const validModes: FontSizeMode[] = ["compacto", "conforto", "acessivel"];
+
 export function FontScaleProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<FontSizeMode>("conforto");
+
+  useEffect(() => {
+    try {
+      const saved = getPreferenceString(PreferenceKeys.FONT_SCALE_MODE);
+      if (saved && validModes.includes(saved as FontSizeMode)) {
+        setModeState(saved as FontSizeMode);
+      }
+    } catch {}
+  }, []);
   const scale = FONT_SCALE[mode];
   const setMode = useCallback((newMode: FontSizeMode) => {
     setModeState(newMode);

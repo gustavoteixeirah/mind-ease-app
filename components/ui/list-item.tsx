@@ -1,5 +1,6 @@
 import { useFontScale } from "@/context/font-scale-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { Check, Circle, Focus } from "lucide-react-native";
 import React from "react";
@@ -47,18 +48,20 @@ const ListItem = ({
   const textColor = useThemeColor({}, "text");
   const iconColor = useThemeColor({}, "icon");
   const { fs } = useFontScale();
+  const themeAccent = useThemeAccent();
 
   const priorityLabel = PRIORITY_LABELS[priority ?? "normal"] ?? "Normal";
 
   const cardBg = isDark ? "#1e1e24" : "#fff";
   const cardBorder = isDark ? "rgba(255,255,255,0.08)" : "#E5E7EB";
-  const tagBg = isDark ? "#312e81" : "#E0E7FF";
-  const tagText = isDark ? "#C7D2FE" : "#3730A3";
+  const tagBg = isDark ? themeAccent.buttonBg : themeAccent.accent;
+  const tagText = isDark ? "#C7D2FE" : "#111827";
   const categoryBadgeBg = isDark ? "#2d2d2d" : "#F3F4F6";
   const categoryBadgeText = isDark ? "#9BA1A6" : "#6B7280";
   const titleCompletedColor = isDark ? "#9BA1A6" : "#6B7280";
-  const checkBg = "#3B82F6";
+  const checkBg = themeAccent.buttonBg;
   const checkIconColor = isDark ? "#fff" : "#111827";
+  const focusIconColor = themeAccent.buttonBg;
 
   return (
     <TouchableOpacity
@@ -139,7 +142,7 @@ const ListItem = ({
             style={styles.focusIconTouch}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Focus size={20} color={iconColor} strokeWidth={2} />
+            <Focus size={20} color={focusIconColor} strokeWidth={2} />
           </TouchableOpacity>
         )}
       </View>

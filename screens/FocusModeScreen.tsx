@@ -1,11 +1,20 @@
 import { Colors } from "@/constants/theme";
 import { useFontScale } from "@/context/font-scale-context";
+import { useTasks } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { PreferenceKeys, getPreferenceString } from "@/lib/storage";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, Check, Circle, Pause, Play } from "lucide-react-native";
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -13,8 +22,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Circle as SvgCircle } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle as SvgCircle } from "react-native-svg";
 
 const RING_SIZE = 200;
 const RING_RADIUS = 92;
@@ -36,7 +45,8 @@ export type PomodoroConfig = {
 
 /** Converte tempo da tarefa (ex: "30m", "1h", "1h30m") em minutos. */
 function parseTaskTimeToMinutes(timeStr: string | undefined): number | null {
-  if (!timeStr || typeof timeStr !== "string" || timeStr.trim() === "") return null;
+  if (!timeStr || typeof timeStr !== "string" || timeStr.trim() === "")
+    return null;
   const s = timeStr.trim().toLowerCase();
   let total = 0;
   const hMatch = s.match(/(\d+)\s*h(?:oras?)?/);
@@ -56,9 +66,10 @@ function parseTaskTimeToMinutes(timeStr: string | undefined): number | null {
 /** Calcula quantos ciclos de foco cabem no tempo da tarefa. */
 function getCyclesTotalFromTask(
   taskTimeMinutes: number | null,
-  focusMinutes: number
+  focusMinutes: number,
 ): number {
-  if (taskTimeMinutes == null || taskTimeMinutes <= 0) return DEFAULT_CYCLES_TOTAL;
+  if (taskTimeMinutes == null || taskTimeMinutes <= 0)
+    return DEFAULT_CYCLES_TOTAL;
   return Math.max(1, Math.ceil(taskTimeMinutes / focusMinutes));
 }
 
@@ -67,9 +78,10 @@ function getWorkCycleSeconds(
   cycleIndex: number,
   cyclesTotal: number,
   focusMinutes: number,
-  taskTotalMinutes: number | null
+  taskTotalMinutes: number | null,
 ): number {
-  if (taskTotalMinutes == null || taskTotalMinutes <= 0) return focusMinutes * 60;
+  if (taskTotalMinutes == null || taskTotalMinutes <= 0)
+    return focusMinutes * 60;
   const remainder = taskTotalMinutes % focusMinutes;
   if (cycleIndex === cyclesTotal && remainder > 0) return remainder * 60;
   return focusMinutes * 60;
@@ -106,16 +118,59 @@ export type FocusModeParams = {
   longPauseMinutes?: number;
 };
 
+function getSavedFocusMinutes(): number {
+  try {
+    const v = getPreferenceString(PreferenceKeys.FOCUS_MINUTES);
+    if (v) {
+      const n = parseInt(v, 10);
+      if (n >= 1 && n <= 60) return n;
+    }
+  } catch {}
+  return DEFAULT_FOCUS_MINUTES;
+}
+
+function getSavedPauseMinutes(): number {
+  try {
+    const v = getPreferenceString(PreferenceKeys.PAUSE_MINUTES);
+    if (v) {
+      const n = parseInt(v, 10);
+      if (n >= 1 && n <= 30) return n;
+    }
+  } catch {}
+  return DEFAULT_PAUSE_MINUTES;
+}
+
 export default function FocusModeScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const params = (route.params ?? {}) as FocusModeParams;
-  const task = params.task;
+  const taskFromParams = params.task;
+  const { tasks } = useTasks();
+  const fullTaskFromContext = useMemo(
+    () =>
+      taskFromParams?.id ? tasks.find((t) => t.id === taskFromParams.id) : null,
+    [tasks, taskFromParams?.id],
+  );
+  const task = fullTaskFromContext ?? taskFromParams;
+
+  const [savedFocusMinutes, setSavedFocusMinutes] =
+    useState(getSavedFocusMinutes);
+  const [savedPauseMinutes, setSavedPauseMinutes] =
+    useState(getSavedPauseMinutes);
 
   const pomodoroConfig = useMemo((): PomodoroConfig => {
-    const focusMinutes = Math.max(1, params.focusMinutes ?? DEFAULT_FOCUS_MINUTES);
-    const pauseMinutes = Math.max(1, params.pauseMinutes ?? DEFAULT_PAUSE_MINUTES);
-    const longPauseMinutes = Math.max(1, params.longPauseMinutes ?? DEFAULT_LONG_PAUSE_MINUTES);
+    const focusMinutes = Math.max(
+      1,
+      params.focusMinutes ?? savedFocusMinutes ?? DEFAULT_FOCUS_MINUTES,
+    );
+    const pauseMinutes = Math.max(
+      1,
+      params.pauseMinutes ?? savedPauseMinutes ?? DEFAULT_PAUSE_MINUTES,
+    );
+    const longPauseMinutes = Math.max(
+      1,
+      params.longPauseMinutes ?? DEFAULT_LONG_PAUSE_MINUTES,
+    );
     const taskMinutes = parseTaskTimeToMinutes(task?.time ?? undefined);
     const cyclesTotal = getCyclesTotalFromTask(taskMinutes, focusMinutes);
     return {
@@ -124,7 +179,14 @@ export default function FocusModeScreen() {
       longPauseMinutes,
       cyclesTotal,
     };
-  }, [params.focusMinutes, params.pauseMinutes, params.longPauseMinutes, task?.time]);
+  }, [
+    params.focusMinutes,
+    params.pauseMinutes,
+    params.longPauseMinutes,
+    task?.time,
+    savedFocusMinutes,
+    savedPauseMinutes,
+  ]);
 
   const initialWorkSeconds = useMemo(
     () =>
@@ -132,9 +194,9 @@ export default function FocusModeScreen() {
         1,
         pomodoroConfig.cyclesTotal,
         pomodoroConfig.focusMinutes,
-        parseTaskTimeToMinutes(task?.time ?? undefined)
+        parseTaskTimeToMinutes(task?.time ?? undefined),
       ),
-    [pomodoroConfig.cyclesTotal, pomodoroConfig.focusMinutes, task?.time]
+    [pomodoroConfig.cyclesTotal, pomodoroConfig.focusMinutes, task?.time],
   );
 
   const colorScheme = useColorScheme() ?? "light";
@@ -147,16 +209,19 @@ export default function FocusModeScreen() {
   const [phase, setPhase] = useState<Phase>("work");
   const [workCycle, setWorkCycle] = useState(1);
   const [remainingSeconds, setRemainingSeconds] = useState(initialWorkSeconds);
-  const [totalPhaseSeconds, setTotalPhaseSeconds] = useState(initialWorkSeconds);
+  const [totalPhaseSeconds, setTotalPhaseSeconds] =
+    useState(initialWorkSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const progress = totalPhaseSeconds > 0 ? remainingSeconds / totalPhaseSeconds : 0;
+  const progress =
+    totalPhaseSeconds > 0 ? remainingSeconds / totalPhaseSeconds : 0;
   const elapsedRatio = 1 - progress;
   const isZero = remainingSeconds <= 0;
   const circumference = 2 * Math.PI * RING_RADIUS;
-  const trackColor = isDark ? "rgba(255,255,255,0.15)" : "#BFDBFE";
-  const progressArcColor = isDark ? "#5a67d8" : "#3b82f6";
+  const themeAccent = useThemeAccent();
+  const trackColor = isDark ? "rgba(255,255,255,0.15)" : themeAccent.accent;
+  const progressArcColor = themeAccent.buttonBg;
 
   const taskTotalMinutes = parseTaskTimeToMinutes(task?.time ?? undefined);
 
@@ -179,7 +244,7 @@ export default function FocusModeScreen() {
         nextCycle,
         pomodoroConfig.cyclesTotal,
         pomodoroConfig.focusMinutes,
-        taskTotalMinutes
+        taskTotalMinutes,
       );
       setPhase("work");
       setWorkCycle(nextCycle);
@@ -245,7 +310,7 @@ export default function FocusModeScreen() {
       return task.subtasks.map((st) => ({
         id: st.id,
         text: st.text,
-        completed: st.completed ?? false,
+        completed: "completed" in st ? (st.completed ?? false) : false,
       }));
     }
     return [];
@@ -260,7 +325,7 @@ export default function FocusModeScreen() {
         task.subtasks.map((st) => ({
           id: st.id,
           text: st.text,
-          completed: st.completed ?? false,
+          completed: "completed" in st ? (st.completed ?? false) : false,
         })),
       );
     } else {
@@ -269,13 +334,13 @@ export default function FocusModeScreen() {
   }, [task?.id, task?.subtasks]);
 
   const headerGradientColors = isDark
-    ? ["#1a1a2e", "#16213e", "#0f3460"]
-    : ["#667eea", "#764ba2", "#5a67d8"];
+    ? themeAccent.gradientDark
+    : themeAccent.gradient;
 
   const contentBg = isDark ? Colors.dark.background : "#fff";
   const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const cardBg = isDark ? "#1e1e24" : "#fafafa";
-  const ringColor = isDark ? "#5a67d8" : "#93c5fd";
+  const ringColor = themeAccent.buttonBg;
 
   const toggleSubtask = (id: string) => {
     setSubtasks((prev) =>
@@ -286,7 +351,7 @@ export default function FocusModeScreen() {
   return (
     <View style={[styles.wrapper, { backgroundColor: contentBg }]}>
       <LinearGradient
-        colors={headerGradientColors as [string, string, ...string[]]}
+        colors={headerGradientColors}
         style={styles.gradientHeader}
       >
         <SafeAreaView edges={["top"]} style={styles.headerSafe}>
@@ -298,7 +363,9 @@ export default function FocusModeScreen() {
             >
               <ArrowLeft size={24} color="#fff" />
             </TouchableOpacity>
-            <Text style={[styles.headerTitle, { fontSize: fs(18) }]}>Modo Foco</Text>
+            <Text style={[styles.headerTitle, { fontSize: fs(18) }]}>
+              Modo Foco
+            </Text>
             <View style={styles.backButton} />
           </View>
         </SafeAreaView>
@@ -320,7 +387,9 @@ export default function FocusModeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-            <Text style={[styles.taskTitle, { color: textColor, fontSize: fs(20) }]}>
+            <Text
+              style={[styles.taskTitle, { color: textColor, fontSize: fs(20) }]}
+            >
               {taskTitle}
             </Text>
             {task?.time != null && task.time !== "" && (
@@ -358,18 +427,30 @@ export default function FocusModeScreen() {
               </Svg>
               <View style={[styles.timerRing, styles.timerInnerAbsolute]}>
                 <View style={styles.timerInner}>
-                  <Text style={[styles.timerText, { color: textColor, fontSize: fs(42) }]}>
+                  <Text
+                    style={[
+                      styles.timerText,
+                      { color: textColor, fontSize: fs(42) },
+                    ]}
+                  >
                     {String(timeRemaining.min).padStart(2, "0")}:
                     {String(timeRemaining.sec).padStart(2, "0")}
                   </Text>
-                  <Text style={[styles.timerStatus, { color: iconColor, fontSize: fs(14) }]}>
+                  <Text
+                    style={[
+                      styles.timerStatus,
+                      { color: iconColor, fontSize: fs(14) },
+                    ]}
+                  >
                     {getPhaseLabel(phase)}
                   </Text>
                 </View>
               </View>
             </View>
 
-            <Text style={[styles.nextPhase, { color: iconColor, fontSize: fs(14) }]}>
+            <Text
+              style={[styles.nextPhase, { color: iconColor, fontSize: fs(14) }]}
+            >
               Próximo: {nextPhaseLabel} · {cycleLabel}
             </Text>
 
@@ -382,7 +463,11 @@ export default function FocusModeScreen() {
                 <Text
                   style={[
                     styles.addMinutesText,
-                    { color: textColor, textDecorationLine: "underline", fontSize: fs(15) },
+                    {
+                      color: textColor,
+                      textDecorationLine: "underline",
+                      fontSize: fs(15),
+                    },
                   ]}
                 >
                   + 5 minutos
@@ -392,7 +477,7 @@ export default function FocusModeScreen() {
                 onPress={togglePausePlay}
                 style={[
                   styles.pauseButton,
-                  { backgroundColor: isDark ? "#2d2d2d" : "#111827" },
+                  { backgroundColor: isDark ? "#374151" : "#111827" },
                 ]}
                 activeOpacity={0.8}
               >
@@ -404,9 +489,15 @@ export default function FocusModeScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.sectionTitle, { color: textColor, fontSize: fs(16) }]}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: textColor, fontSize: fs(16) },
+              ]}
+            >
               Sub-tarefas
             </Text>
+            {console.log(subtasks)}
             {subtasks.map((st) => (
               <TouchableOpacity
                 key={st.id}
@@ -440,6 +531,7 @@ export default function FocusModeScreen() {
                   ]}
                 >
                   {st.text}
+                  {JSON.stringify(st)}
                 </Text>
               </TouchableOpacity>
             ))}

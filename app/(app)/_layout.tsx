@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/auth-context";
+import { TasksProvider } from "@/context/tasks-context";
 import TabNavigator from "@/Navigation";
 import FocusModeScreen from "@/screens/FocusModeScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -19,6 +20,7 @@ export default function AppLayout() {
   }, [user, isLoading, router]);
 
   return (
+    <TasksProvider>
     <Stack.Navigator
       screenOptions={{ headerShown: false }}
       initialRouteName="Tabs"
@@ -27,5 +29,6 @@ export default function AppLayout() {
       <Stack.Screen name="FocusMode" component={FocusModeScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
     </Stack.Navigator>
+    </TasksProvider>
   );
 }

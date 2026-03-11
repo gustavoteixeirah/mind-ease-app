@@ -1,7 +1,9 @@
 import { Colors } from "@/constants/theme";
 import ListItem from "@/components/ui/list-item";
 import { useFontScale } from "@/context/font-scale-context";
+import { useTasks, type Task } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -28,18 +30,6 @@ const EFFORT_LABELS: Record<string, string> = {
 };
 
 const EFFORT_ORDER = ["Baixa", "Média", "Alta"] as const;
-
-type TaskItem = {
-  id: string;
-  title: string;
-  completed: boolean;
-  complexity: string;
-  priority: "baixa" | "normal" | "alta";
-  time: string;
-  tags?: string[];
-  date: string;
-  focusModeEnabled: boolean;
-};
 
 function formatDateKey(d: Date): string {
   const y = d.getFullYear();
@@ -90,74 +80,10 @@ function getDateRange(daysBack: number, daysForward: number): Date[] {
   return dates;
 }
 
-const todayKey = formatDateKey(new Date());
-
-const INITIAL_TASKS: TaskItem[] = [
-  {
-    id: "1",
-    title: "Escrever dissertação",
-    completed: false,
-    complexity: "Média",
-    priority: "alta",
-    time: "1h30m",
-    tags: ["Trabalho", "Escola"],
-    date: todayKey,
-    focusModeEnabled: true,
-  },
-  {
-    id: "2",
-    title: "Ler 3 capítulos",
-    completed: false,
-    complexity: "Baixa",
-    priority: "normal",
-    time: "2h",
-    tags: ["Estudo"],
-    date: todayKey,
-    focusModeEnabled: true,
-  },
-  {
-    id: "3",
-    title: "Responder e-mails",
-    completed: true,
-    complexity: "Baixa",
-    priority: "baixa",
-    time: "30m",
-    tags: [],
-    date: todayKey,
-    focusModeEnabled: true,
-  },
-  {
-    id: "4",
-    title: "Revisar apresentação",
-    completed: false,
-    complexity: "Alta",
-    priority: "alta",
-    time: "45m",
-    tags: ["Internet"],
-    date: todayKey,
-    focusModeEnabled: false,
-  },
-  {
-    id: "5",
-    title: "Entregar relatório",
-    completed: false,
-    complexity: "Média",
-    priority: "normal",
-    time: "1h",
-    tags: [],
-    date: (() => {
-      const t = new Date();
-      t.setDate(t.getDate() + 1);
-      return formatDateKey(t);
-    })(),
-    focusModeEnabled: true,
-  },
-];
-
 const TaskListScreen = () => {
   const navigation = useNavigation();
+  const { getTasksByDate, toggleCompleted } = useTasks();
   const [detailedMode, setDetailedMode] = React.useState(false);
-  const [tasks, setTasks] = React.useState<TaskItem[]>(INITIAL_TASKS);
   const [selectedDate, setSelectedDate] = React.useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -174,8 +100,8 @@ const TaskListScreen = () => {
 
   const selectedDateKey = formatDateKey(selectedDate);
   const tasksForSelectedDay = React.useMemo(
-    () => tasks.filter((t) => t.date === selectedDateKey),
-    [tasks, selectedDateKey],
+    () => getTasksByDate(selectedDateKey),
+    [getTasksByDate, selectedDateKey],
   );
 
   const goToPrevDay = () => {
@@ -194,13 +120,7 @@ const TaskListScreen = () => {
     });
   };
 
-  const toggleCompleted = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-    );
-  };
-
-  const filterByComplexity = (taskList: TaskItem[], complexity: string) => {
+  const filterByComplexity = (taskList: Task[], complexity: string) => {
     return taskList.filter((task) => task.complexity === complexity);
   };
 
@@ -210,18 +130,21 @@ const TaskListScreen = () => {
 
   const colorScheme = useColorScheme() ?? "light";
   const isDark = colorScheme === "dark";
+  const themeAccent = useThemeAccent();
   const textColor = useThemeColor({}, "text");
   const iconColor = useThemeColor({}, "icon");
   const { fs } = useFontScale();
 
   const headerGradientColors = isDark
-    ? (["#1a1a2e", "#16213e", "#0f3460"] as [string, string, ...string[]])
-    : (["#667eea", "#764ba2", "#5a67d8"] as [string, string, ...string[]]);
+    ? themeAccent.gradientDark
+    : themeAccent.gradient;
 
   const contentBg = isDark ? Colors.dark.background : "#fff";
   const contentBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const badgeBg = isDark ? "#1e1e24" : "#F3F4F6";
   const badgeTextColor = isDark ? "#9BA1A6" : "#4B5563";
+  const dateSelectedBg = isDark ? themeAccent.buttonBg : themeAccent.accent;
+  const dateSelectedTextColor = isDark ? "#fff" : themeAccent.buttonBg;
 
   return (
     <View style={[styles.container, { backgroundColor: contentBg }]}>
@@ -316,7 +239,7 @@ const TaskListScreen = () => {
                               navigation.getParent() as {
                                 navigate: (
                                   name: string,
-                                  params?: { task: TaskItem },
+                                  params?: { task: Task },
                                 ) => void;
                               }
                             )?.navigate("FocusMode", { task: item })
@@ -367,7 +290,7 @@ const TaskListScreen = () => {
                       styles.dateItem,
                       {
                         backgroundColor: isSelected
-                          ? (isDark ? "#312e81" : "#E0E7FF")
+                          ? dateSelectedBg
                           : isDark
                             ? "#252530"
                             : "#f5f5f5",
@@ -380,7 +303,7 @@ const TaskListScreen = () => {
                         styles.dateItemText,
                         {
                           color: isSelected
-                            ? (isDark ? "#C7D2FE" : "#3730A3")
+                            ? dateSelectedTextColor
                             : textColor,
                           fontSize: fs(15),
                         },
