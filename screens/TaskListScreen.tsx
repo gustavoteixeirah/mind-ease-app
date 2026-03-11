@@ -5,10 +5,13 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, ArrowRight, Calendar } from "lucide-react-native";
+import { ArrowLeft, ArrowRight, Calendar, X } from "lucide-react-native";
 import React from "react";
 import {
   FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -38,6 +41,57 @@ type TaskItem = {
   focusModeEnabled: boolean;
 };
 
+function formatDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function formatDateLabel(d: Date): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dNorm = new Date(d);
+  dNorm.setHours(0, 0, 0, 0);
+
+  if (isSameDay(dNorm, today)) return "Hoje";
+  if (isSameDay(dNorm, tomorrow)) return "Amanhã";
+  if (isSameDay(dNorm, yesterday)) return "Ontem";
+  const str = d.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/** Retorna array de datas: de (hoje - daysBack) até (hoje + daysForward). */
+function getDateRange(daysBack: number, daysForward: number): Date[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dates: Date[] = [];
+  for (let i = -daysBack; i <= daysForward; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+const todayKey = formatDateKey(new Date());
+
 const INITIAL_TASKS: TaskItem[] = [
   {
     id: "1",
@@ -47,7 +101,7 @@ const INITIAL_TASKS: TaskItem[] = [
     priority: "alta",
     time: "1h30m",
     tags: ["Trabalho", "Escola"],
-    date: "2026-06-01",
+    date: todayKey,
     focusModeEnabled: true,
   },
   {
@@ -58,7 +112,7 @@ const INITIAL_TASKS: TaskItem[] = [
     priority: "normal",
     time: "2h",
     tags: ["Estudo"],
-    date: "2026-06-02",
+    date: todayKey,
     focusModeEnabled: true,
   },
   {
@@ -69,19 +123,34 @@ const INITIAL_TASKS: TaskItem[] = [
     priority: "baixa",
     time: "30m",
     tags: [],
-    date: "2026-02-17",
+    date: todayKey,
     focusModeEnabled: true,
   },
   {
     id: "4",
-    title: "Escrever dissertação",
+    title: "Revisar apresentação",
     completed: false,
     complexity: "Alta",
     priority: "alta",
     time: "45m",
     tags: ["Internet"],
-    date: "2026-06-04",
+    date: todayKey,
     focusModeEnabled: false,
+  },
+  {
+    id: "5",
+    title: "Entregar relatório",
+    completed: false,
+    complexity: "Média",
+    priority: "normal",
+    time: "1h",
+    tags: [],
+    date: (() => {
+      const t = new Date();
+      t.setDate(t.getDate() + 1);
+      return formatDateKey(t);
+    })(),
+    focusModeEnabled: true,
   },
 ];
 
@@ -89,6 +158,41 @@ const TaskListScreen = () => {
   const navigation = useNavigation();
   const [detailedMode, setDetailedMode] = React.useState(false);
   const [tasks, setTasks] = React.useState<TaskItem[]>(INITIAL_TASKS);
+  const [selectedDate, setSelectedDate] = React.useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const [datePickerVisible, setDatePickerVisible] = React.useState(false);
+
+  const selectDateFromPicker = (d: Date) => {
+    const normalized = new Date(d);
+    normalized.setHours(0, 0, 0, 0);
+    setSelectedDate(normalized);
+    setDatePickerVisible(false);
+  };
+
+  const selectedDateKey = formatDateKey(selectedDate);
+  const tasksForSelectedDay = React.useMemo(
+    () => tasks.filter((t) => t.date === selectedDateKey),
+    [tasks, selectedDateKey],
+  );
+
+  const goToPrevDay = () => {
+    setSelectedDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() - 1);
+      return next;
+    });
+  };
+
+  const goToNextDay = () => {
+    setSelectedDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + 1);
+      return next;
+    });
+  };
 
   const toggleCompleted = (id: string) => {
     setTasks((prev) =>
@@ -96,12 +200,12 @@ const TaskListScreen = () => {
     );
   };
 
-  const filterByComplexity = (taskList: typeof tasks, complexity: string) => {
+  const filterByComplexity = (taskList: TaskItem[], complexity: string) => {
     return taskList.filter((task) => task.complexity === complexity);
   };
 
   const complexityValues = EFFORT_ORDER.filter((c) =>
-    tasks.some((t) => t.complexity === c),
+    tasksForSelectedDay.some((t) => t.complexity === c),
   );
 
   const colorScheme = useColorScheme() ?? "light";
@@ -154,20 +258,40 @@ const TaskListScreen = () => {
         ]}
       >
         <View style={styles.dateRow}>
-          <TouchableOpacity style={styles.dateNav} hitSlop={12}>
+          <TouchableOpacity
+            style={styles.dateNav}
+            hitSlop={12}
+            onPress={goToPrevDay}
+          >
             <ArrowLeft size={22} color={iconColor} />
           </TouchableOpacity>
-          <Text style={[styles.dateTitle, { color: textColor, fontSize: fs(18) }]}>Hoje</Text>
+          <Text
+            style={[styles.dateTitle, { color: textColor, fontSize: fs(18) }]}
+            numberOfLines={2}
+          >
+            {formatDateLabel(selectedDate)}
+          </Text>
           <View style={styles.dateRight}>
-            <Calendar size={20} color={iconColor} style={styles.calendarIcon} />
-            <TouchableOpacity hitSlop={12}>
+            <TouchableOpacity
+              onPress={() => setDatePickerVisible(true)}
+              hitSlop={12}
+              style={styles.calendarButton}
+            >
+              <Calendar size={20} color={iconColor} style={styles.calendarIcon} />
+            </TouchableOpacity>
+            <TouchableOpacity hitSlop={12} onPress={goToNextDay}>
               <ArrowRight size={22} color={iconColor} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {complexityValues.map((comp, index) => {
-          const list = filterByComplexity(tasks, comp);
+        {complexityValues.length === 0 ? (
+          <Text style={[styles.emptyDayText, { color: textColor, fontSize: fs(16) }]}>
+            Nenhuma tarefa para este dia.
+          </Text>
+        ) : (
+          complexityValues.map((comp, index) => {
+            const list = filterByComplexity(tasksForSelectedDay, comp);
           const count = list.length;
           const label = EFFORT_LABELS[comp] ?? comp;
           return (
@@ -207,8 +331,70 @@ const TaskListScreen = () => {
               />
             </View>
           );
-        })}
+        })
+        )}
       </View>
+
+      <Modal
+        visible={datePickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDatePickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setDatePickerVisible(false)}
+        >
+          <Pressable
+            style={[styles.modalContent, { backgroundColor: contentBg }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: contentBorder }]}>
+              <Text style={[styles.modalTitle, { color: textColor, fontSize: fs(18) }]}>
+                Escolher data
+              </Text>
+              <TouchableOpacity onPress={() => setDatePickerVisible(false)}>
+                <X size={24} color={iconColor} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.dateList}>
+              {getDateRange(7, 14).map((d) => {
+                const isSelected = isSameDay(d, selectedDate);
+                return (
+                  <TouchableOpacity
+                    key={d.getTime()}
+                    style={[
+                      styles.dateItem,
+                      {
+                        backgroundColor: isSelected
+                          ? (isDark ? "#312e81" : "#E0E7FF")
+                          : isDark
+                            ? "#252530"
+                            : "#f5f5f5",
+                      },
+                    ]}
+                    onPress={() => selectDateFromPicker(d)}
+                  >
+                    <Text
+                      style={[
+                        styles.dateItemText,
+                        {
+                          color: isSelected
+                            ? (isDark ? "#C7D2FE" : "#3730A3")
+                            : textColor,
+                          fontSize: fs(15),
+                        },
+                      ]}
+                    >
+                      {formatDateLabel(d)} ({formatDateKey(d)})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -277,8 +463,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  calendarButton: {
+    padding: 4,
+  },
   calendarIcon: {
     marginRight: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "60%",
+    paddingBottom: 24,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontWeight: "700",
+  },
+  dateList: {
+    padding: 16,
+  },
+  dateItem: {
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  dateItemText: {},
+  emptyDayText: {
+    textAlign: "center",
+    paddingVertical: 24,
+    opacity: 0.8,
   },
   section: {
     marginBottom: 8,

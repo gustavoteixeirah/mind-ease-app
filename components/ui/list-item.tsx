@@ -76,7 +76,12 @@ const ListItem = ({
               key={index}
               style={[styles.tagBadge, { backgroundColor: tagBg }]}
             >
-              <Text style={[styles.tagBadgeText, { color: tagText, fontSize: fs(12) }]}>
+              <Text
+                style={[
+                  styles.tagBadgeText,
+                  { color: tagText, fontSize: fs(12) },
+                ]}
+              >
                 {tag}
               </Text>
             </View>
@@ -94,7 +99,10 @@ const ListItem = ({
               ]}
             >
               <Text
-                style={[styles.categoryBadgeText, { color: categoryBadgeText, fontSize: fs(12) }]}
+                style={[
+                  styles.categoryBadgeText,
+                  { color: categoryBadgeText, fontSize: fs(12) },
+                ]}
               >
                 {cat}
               </Text>
@@ -138,7 +146,9 @@ const ListItem = ({
       <View style={styles.metaRow}>
         {detailedMode ? (
           <View style={styles.metaLeft}>
-            <Text style={[styles.metaText, { color: iconColor, fontSize: fs(14) }]}>
+            <Text
+              style={[styles.metaText, { color: iconColor, fontSize: fs(14) }]}
+            >
               {priorityLabel}
             </Text>
           </View>
@@ -147,7 +157,11 @@ const ListItem = ({
         )}
         <View style={styles.metaRight}>
           {detailedMode && time != null && time !== "" && (
-            <Text style={[styles.metaText, { color: iconColor, fontSize: fs(14) }]}>{time}</Text>
+            <Text
+              style={[styles.metaText, { color: iconColor, fontSize: fs(14) }]}
+            >
+              {time}
+            </Text>
           )}
         </View>
       </View>

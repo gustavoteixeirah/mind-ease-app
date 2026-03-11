@@ -6,6 +6,7 @@ import { Home, LayoutList, Plus, Settings } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import DashboardScreen from "./app/(app)/dashboard";
+import ProfileScreen from "./app/(app)/profile";
 import AddEditTaskScreen from "./screens/AddEditTaskScreen";
 import TaskListScreen from "./screens/TaskListScreen";
 
@@ -61,7 +62,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Perfil"
-        component={SettingsScreen}
+        component={ProfileScreen}
         options={{
           headerShown: false,
           tabBarIcon: ({ color }) => <Settings color={color} size={22} />,

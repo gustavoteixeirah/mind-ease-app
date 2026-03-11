@@ -4,7 +4,6 @@ import FocusModeScreen from "@/screens/FocusModeScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
-import DashboardScreen from "./dashboard";
 import ProfileScreen from "./profile";
 
 const Stack = createNativeStackNavigator();
@@ -26,8 +25,7 @@ export default function AppLayout() {
     >
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="FocusMode" component={FocusModeScreen} />
-      <Stack.Screen name="dashboard" component={DashboardScreen} />
-      <Stack.Screen name="profile" component={ProfileScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
     </Stack.Navigator>
   );
 }
