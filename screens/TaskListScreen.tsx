@@ -5,10 +5,10 @@ import { useTasks, type Task } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, ArrowRight, Calendar, X } from "lucide-react-native";
-import React from "react";
+import React, { useRef } from "react";
 import {
   FlatList,
   Modal,
@@ -82,7 +82,22 @@ function getDateRange(daysBack: number, daysForward: number): Date[] {
 
 const TaskListScreen = () => {
   const navigation = useNavigation();
-  const { getTasksByDate, toggleCompleted } = useTasks();
+  const route = useRoute();
+  const routeParams = (route.params as { deleteTaskId?: string } | undefined) ?? {};
+  const deleteTaskIdParam = routeParams.deleteTaskId;
+  const { getTasksByDate, toggleCompleted, deleteTask } = useTasks();
+  const processedDeleteRef = useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!deleteTaskIdParam || processedDeleteRef.current === deleteTaskIdParam) return;
+    processedDeleteRef.current = deleteTaskIdParam;
+    deleteTask(String(deleteTaskIdParam));
+    (navigation as unknown as { setParams: (p: { deleteTaskId?: undefined }) => void }).setParams({ deleteTaskId: undefined });
+  }, [deleteTaskIdParam, deleteTask, navigation]);
+
+  const goToEditTask = (task: Task) => {
+    (navigation as { navigate: (name: string, params?: object) => void }).navigate("AddTask", { taskId: task.id, mode: "edit" });
+  };
   const [detailedMode, setDetailedMode] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState(() => {
     const d = new Date();
@@ -231,7 +246,8 @@ const TaskListScreen = () => {
                   <ListItem
                     {...item}
                     detailedMode={detailedMode}
-                    onPress={() => toggleCompleted(item.id)}
+                    onCheckPress={() => toggleCompleted(item.id)}
+                    onCardPress={() => goToEditTask(item)}
                     onFocusPress={
                       item.focusModeEnabled && !item.completed
                         ? () =>

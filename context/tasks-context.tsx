@@ -163,9 +163,14 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = useCallback(
     (id: string) => {
-      persist(tasks.filter((t) => t.id !== id));
+      const idStr = String(id);
+      setTasks((prev) => {
+        const next = prev.filter((t) => String(t.id) !== idStr);
+        saveTasksToStorage(next);
+        return next;
+      });
     },
-    [tasks, persist],
+    [],
   );
 
   const getTasksByDate = useCallback(

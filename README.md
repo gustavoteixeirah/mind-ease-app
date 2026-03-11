@@ -1,50 +1,126 @@
-# Welcome to your Expo app 👋
+# Mind Ease App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicativo de produtividade e bem-estar mental para organizar tarefas, acompanhar energia e usar modo foco (técnica Pomodoro). Desenvolvido com **Expo** e **React Native**, funciona em **web**, **Android** e **iOS**.
 
-## Get started
+---
 
-1. Install dependencies
+## Funcionalidades
 
-   ```bash
-   npm install
-   ```
+- **Dashboard** – Tarefas do dia, seleção de energia (Calmo / Presente / Focado) e sugestão de tarefa para o momento
+- **Lista de tarefas** – Visualização por data, marcar conclusão, editar e excluir
+- **Criar/editar tarefa** – Título, data, esforço (Leve/Normal/Exigente), prioridade, tempo estimado, subtarefas e tags
+- **Modo foco** – Sessões de foco com timer, subtarefas e pausas configuráveis (25/30/35 min foco, 2/5/10 min pausa)
+- **Perfil** – Aparência (claro/escuro/sistema), tema de cor, tamanho da fonte (compacto/conforto/acessível), duração do foco e da pausa
+- **Autenticação** – Login com [Stack Auth](https://stack-auth.com/) (email/senha ou provedores sociais)
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## Tecnologias
 
-In the output, you'll find options to open the app in a
+| Área           | Stack |
+|----------------|--------|
+| Framework      | Expo SDK 54, React 19, React Native |
+| Navegação      | Expo Router, React Navigation (tabs + stack) |
+| Autenticação   | Stack Auth (@stackframe/js) |
+| Armazenamento  | AsyncStorage, MMKV (preferências) |
+| UI             | Lucide React Native, expo-linear-gradient, react-native-safe-area-context |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Pré-requisitos
 
-## Get a fresh project
+- **Node.js** 18+
+- **npm** ou **yarn**
+- Para **Android**: Android Studio e emulador ou dispositivo
+- Para **iOS**: Xcode (apenas macOS)
+- Conta no [Stack Auth](https://stack-auth.com/) para autenticação (opcional para desenvolvimento local)
 
-When you're ready, run:
+---
+
+## Instalação
+
+1. Clone o repositório e entre na pasta:
 
 ```bash
-npm run reset-project
+git clone <url-do-repositorio>
+cd mind-ease-app
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Instale as dependências:
 
-## Learn more
+```bash
+npm install
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+3. Configure as variáveis de ambiente (autenticação Stack):
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Crie um arquivo `.env.local` na raiz do projeto com:
 
-## Join the community
+```env
+EXPO_PUBLIC_STACK_PROJECT_ID=seu_project_id
+EXPO_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY=sua_publishable_key
+STACK_SECRET_SERVER_KEY=sua_secret_server_key
+```
 
-Join our community of developers creating universal apps.
+> Os valores são obtidos no painel do [Stack Auth](https://stack-auth.com/). Não commite o `.env.local` (já deve estar no `.gitignore`).
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## Como rodar
+
+| Comando            | Descrição |
+|--------------------|-----------|
+| `npm run start`    | Inicia o Expo (QR code para device, atalhos para web/android/ios) |
+| `npm run web`      | Abre no navegador |
+| `npm run android`  | Build e execução no Android (Expo dev client / `expo run:android`) |
+| `npm run ios`       | Build e execução no iOS (apenas macOS) |
+| `npm run lint`     | Executa o ESLint |
+
+### Desenvolvimento
+
+- **Web**: após `npm run start`, pressione `w` ou use `npm run web`.
+- **Android**: conecte um dispositivo ou inicie um emulador e pressione `a`, ou use `npx expo run:android`.
+- **iOS**: `npx expo run:ios` (macOS com Xcode instalado).
+
+---
+
+## Estrutura do projeto (resumo)
+
+```
+mind-ease-app/
+├── app/                    # Rotas (Expo Router)
+│   ├── (app)/               # Telas autenticadas
+│   │   ├── _layout.tsx      # Stack (Tabs, FocusMode, Profile)
+│   │   ├── dashboard.tsx    # Home
+│   │   └── profile.tsx      # Perfil / preferências
+│   ├── (auth)/              # Login
+│   │   ├── _layout.tsx
+│   │   └── login.tsx
+│   ├── _layout.tsx          # Root layout
+│   └── index.tsx            # Redireciona por auth
+├── Navigation.tsx           # Tab navigator (Home, Tarefas, Perfil, AddTask)
+├── screens/                 # Telas principais
+│   ├── AddEditTaskScreen.tsx
+│   ├── TaskListScreen.tsx
+│   ├── EditTaskListScreen.tsx
+│   └── FocusModeScreen.tsx
+├── components/              # Componentes reutilizáveis
+│   └── ui/
+│       └── list-item.tsx
+├── context/                 # Contextos React
+│   ├── auth-context.tsx
+│   ├── tasks-context.tsx
+│   ├── font-scale-context.tsx
+│   ├── theme-accent-context.tsx
+│   └── appearance-context.tsx
+├── hooks/                   # Hooks (tema, cores)
+├── lib/                     # Utilitários (storage, stack-auth)
+├── constants/               # Tema, cores
+└── assets/
+```
+
+---
+
+## Licença
+
+Projeto privado. Uso conforme definido pelos mantenedores.

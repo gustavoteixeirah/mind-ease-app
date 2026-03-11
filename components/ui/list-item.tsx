@@ -20,7 +20,8 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 const ListItem = ({
   title,
-  onPress,
+  onCardPress,
+  onCheckPress,
   onFocusPress,
   completed,
   complexity,
@@ -32,7 +33,10 @@ const ListItem = ({
   showFocusIcon = false,
 }: {
   title: string;
-  onPress?: () => void;
+  /** Chamado ao tocar no card (editar tarefa). */
+  onCardPress?: () => void;
+  /** Chamado ao tocar no check/círculo (marcar concluída). */
+  onCheckPress?: () => void;
   onFocusPress?: () => void;
   completed: boolean;
   complexity: string;
@@ -65,7 +69,7 @@ const ListItem = ({
 
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={onCardPress}
       style={[
         styles.container,
         { backgroundColor: cardBg, borderColor: cardBorder },
@@ -114,12 +118,18 @@ const ListItem = ({
         </View>
       )}
       <View style={styles.titleRow}>
-        {!completed && <Circle size={22} color={iconColor} strokeWidth={2} />}
-        {completed && (
-          <View style={[styles.checkboxChecked, { backgroundColor: checkBg }]}>
-            <Check size={14} color={checkIconColor} strokeWidth={3} />
-          </View>
-        )}
+        <TouchableOpacity
+          onPress={() => onCheckPress?.()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={styles.checkTouch}
+        >
+          {!completed && <Circle size={22} color={iconColor} strokeWidth={2} />}
+          {completed && (
+            <View style={[styles.checkboxChecked, { backgroundColor: checkBg }]}>
+              <Check size={14} color={checkIconColor} strokeWidth={3} />
+            </View>
+          )}
+        </TouchableOpacity>
         <Text
           style={[
             styles.title,
@@ -249,6 +259,9 @@ const styles = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 4,
+  },
+  checkTouch: {
+    padding: 2,
   },
   focusIconTouch: {
     padding: 4,

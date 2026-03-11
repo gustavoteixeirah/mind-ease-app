@@ -86,6 +86,7 @@ export default function DashboardScreen() {
   const { fs } = useFontScale();
 
   const [energy, setEnergy] = useState<EnergyState>("presente");
+  const [showEnergyTooltip, setShowEnergyTooltip] = useState(false);
 
   const todayKey = formatDateKey(new Date());
   const tasksForToday = useMemo(
@@ -154,6 +155,10 @@ export default function DashboardScreen() {
     router.push("/(app)/profile");
   };
 
+  const goToEditTask = (task: Task) => {
+    (navigation as { navigate: (name: string, params?: object) => void }).navigate("AddTask", { taskId: task.id, mode: "edit" });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: contentBg }]}>
       <LinearGradient
@@ -201,11 +206,21 @@ export default function DashboardScreen() {
               >
                 Como está sua energia agora?
               </Text>
-              <TouchableOpacity
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Info size={16} color={headerSecondaryColor} />
-              </TouchableOpacity>
+              <View style={styles.energyInfoWrap}>
+                <TouchableOpacity
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => setShowEnergyTooltip((v) => !v)}
+                >
+                  <Info size={16} color={headerSecondaryColor} />
+                </TouchableOpacity>
+                {showEnergyTooltip && (
+                  <View style={styles.energyTooltipWrap}>
+                    <Text style={[styles.energyTooltipText, { fontSize: fs(13) }]}>
+                      Usamos isso para sugerir tarefas mais compatíveis com seu ritmo.
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
             <View style={styles.pillRow}>
               <TouchableOpacity
@@ -322,7 +337,8 @@ export default function DashboardScreen() {
                   priority={focusTask.priority}
                   time={focusTask.time}
                   showFocusIcon
-                  onPress={() => toggleCompleted(focusTask.id)}
+                  onCheckPress={() => toggleCompleted(focusTask.id)}
+                  onCardPress={() => goToEditTask(focusTask)}
                   onFocusPress={() => goToFocusMode(focusTask)}
                 />
               </View>
@@ -356,7 +372,8 @@ export default function DashboardScreen() {
                   priority={task.priority}
                   time={task.time}
                   showFocusIcon={!task.completed}
-                  onPress={() => toggleCompleted(task.id)}
+                  onCheckPress={() => toggleCompleted(task.id)}
+                  onCardPress={() => goToEditTask(task)}
                   onFocusPress={() => !task.completed && goToFocusMode(task)}
                 />
               </View>
@@ -443,6 +460,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginBottom: 12,
+  },
+  energyInfoWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  energyTooltipWrap: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    maxWidth: 220,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  energyTooltipText: {
+    color: "#111827",
+    fontSize: 13,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontWeight: "700",

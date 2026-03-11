@@ -67,6 +67,7 @@ const TabNavigator = () => {
       <Tab.Screen
         name="AddTask"
         component={AddEditTaskScreen}
+        initialParams={{ mode: "create" }}
         options={{
           tabBarLabel: "",
           headerShown: false,
@@ -79,6 +80,14 @@ const TabNavigator = () => {
             </View>
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate("AddTask", {
+              mode: "create",
+              _clear: Date.now(),
+            });
+          },
+        })}
       />
     </Tab.Navigator>
   );

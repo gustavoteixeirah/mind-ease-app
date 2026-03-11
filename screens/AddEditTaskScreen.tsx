@@ -4,7 +4,7 @@ import { useTasks, type TaskPriority } from "@/context/tasks-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useThemeAccent } from "@/hooks/use-theme-accent";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams } from "expo-router";
 import {
@@ -15,8 +15,11 @@ import {
   Plus,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -97,9 +100,32 @@ function minutesToTimeString(minutes: number): string {
 }
 
 export default function AddEditTaskScreen() {
-  const params = useLocalSearchParams<{ taskId?: string }>();
+  const searchParams = useLocalSearchParams<{ taskId?: string }>();
+  const route = useRoute();
+  const routeParams =
+    (route.params as
+      | { taskId?: string; _clear?: number; mode?: string }
+      | undefined) ?? {};
+  const params = { ...searchParams, ...routeParams } as {
+    taskId?: string;
+    _clear?: number;
+    mode?: string;
+  };
+  const rawTaskId = params?.taskId as string | string[] | undefined;
+  const taskId =
+    typeof rawTaskId === "string"
+      ? rawTaskId
+      : Array.isArray(rawTaskId) && rawTaskId.length > 0
+        ? String(rawTaskId[0])
+        : undefined;
+  const clearKey = params?._clear;
+  const isCreateMode = params?.mode === "create";
+  /** Só consideramos "editar" quando há taskId e não estamos em modo criar (botão +) */
+  const effectiveEditId =
+    isCreateMode || clearKey != null ? undefined : (taskId ?? undefined);
+  const isEdit = Boolean(effectiveEditId);
   const navigation = useNavigation();
-  const { addTask, updateTask } = useTasks();
+  const { tasks, addTask, updateTask } = useTasks();
   const colorScheme = useColorScheme() ?? "light";
   const isDark = colorScheme === "dark";
   const themeAccent = useThemeAccent();
@@ -126,15 +152,81 @@ export default function AddEditTaskScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [newTagText, setNewTagText] = useState("");
   const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const DELETE_LOADING_DELAY_MS = 400;
+  const loadedTaskIdRef = useRef<string | null>(null);
 
-  const isEdit = Boolean(params?.taskId);
+  useEffect(() => {
+    if (!effectiveEditId || tasks.length === 0) return;
+    if (loadedTaskIdRef.current === effectiveEditId) return;
+    const task = tasks.find((t) => t.id === effectiveEditId);
+    if (!task) return;
+    loadedTaskIdRef.current = effectiveEditId;
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setTags(task.tags ?? []);
+    setSubtasks(
+      task.subtasks?.map((st) => ({ id: st.id, text: st.text })) ?? [],
+    );
+    setEstimatedTime(task.time ?? "");
+    setPriority(task.priority ?? "normal");
+    const complexityToEffort: Record<
+      string,
+      (typeof EFFORT_OPTIONS)[number]["id"]
+    > = {
+      Baixa: "leve",
+      Média: "normal",
+      Alta: "exigente",
+    };
+    setEffort(complexityToEffort[task.complexity] ?? "normal");
+    const todayKey = formatDateKey(new Date());
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = formatDateKey(tomorrow);
+    if (task.date === todayKey) {
+      setWhen("hoje");
+      setCustomDate(null);
+    } else if (task.date === tomorrowKey) {
+      setWhen("amanha");
+      setCustomDate(null);
+    } else {
+      setWhen("escolher");
+      const [y, m, d] = (task.date ?? "").split("-").map(Number);
+      if (y && m && d) setCustomDate(new Date(y, m - 1, d));
+    }
+    setDetailsExpanded(true);
+    if (task.subtasks?.length) setSubtaskSectionVisible(true);
+  }, [effectiveEditId, tasks]);
+
+  useEffect(() => {
+    if (effectiveEditId != null) return;
+    loadedTaskIdRef.current = null;
+    setTitle("");
+    setWhen("hoje");
+    setCustomDate(null);
+    setEffort("normal");
+    setNewSubtaskText("");
+    setSubtasks([]);
+    setSubtaskSectionVisible(false);
+    setDetailsExpanded(false);
+    setPriority("");
+    setEstimatedTime("");
+    setDescription("");
+    setTags([]);
+    setNewTagText("");
+    setDatePickerVisible(false);
+    setIsDeleting(false);
+  }, [effectiveEditId, clearKey]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      (navigation.getParent() as { navigate: (name: string) => void } | undefined)
-        ?.navigate("Tarefas");
+      (
+        navigation.getParent() as
+          | { navigate: (name: string) => void }
+          | undefined
+      )?.navigate("Tarefas");
     }
   };
 
@@ -182,12 +274,13 @@ export default function AddEditTaskScreen() {
       exigente: "Alta",
     };
     const complexity = effortToComplexity[effort] ?? "Média";
-    const taskPriority: TaskPriority =
-      (priority === "" ? "normal" : priority) as TaskPriority;
+    const taskPriority: TaskPriority = (
+      priority === "" ? "normal" : priority
+    ) as TaskPriority;
     const mins = parseEstimatedMinutes(estimatedTime);
     const time = mins !== null ? minutesToTimeString(mins) : "30m";
-    if (isEdit && params?.taskId) {
-      updateTask(params.taskId, {
+    if (effectiveEditId) {
+      updateTask(effectiveEditId, {
         title: trimmedTitle,
         date: dateKey,
         complexity,
@@ -212,10 +305,16 @@ export default function AddEditTaskScreen() {
       });
     }
     if (navigation.canGoBack()) navigation.goBack();
-    else (navigation.getParent() as { navigate: (name: string) => void } | undefined)?.navigate("Tarefas");
+    else
+      (
+        navigation.getParent() as
+          | { navigate: (name: string) => void }
+          | undefined
+      )?.navigate("Tarefas");
   };
 
   const estimatedMinutes = parseEstimatedMinutes(estimatedTime);
+  const is24hOrMore = estimatedMinutes !== null && estimatedMinutes >= 24 * 60;
   const isExigente = effort === "exigente";
   const isAltaAgora = priority === "alta" && when === "agora";
   const isMenosDe30Min = estimatedMinutes !== null && estimatedMinutes < 30;
@@ -279,7 +378,12 @@ export default function AddEditTaskScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+            <Text
+              style={[
+                styles.sectionLabel,
+                { color: textColor, fontSize: fs(14) },
+              ]}
+            >
               Tarefa
             </Text>
             <TextInput
@@ -297,7 +401,12 @@ export default function AddEditTaskScreen() {
               onChangeText={setTitle}
             />
 
-            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+            <Text
+              style={[
+                styles.sectionLabel,
+                { color: textColor, fontSize: fs(14) },
+              ]}
+            >
               Para quando deve ser feito?
             </Text>
             <View style={styles.chipRow}>
@@ -341,7 +450,12 @@ export default function AddEditTaskScreen() {
               ))}
             </View>
 
-            <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+            <Text
+              style={[
+                styles.sectionLabel,
+                { color: textColor, fontSize: fs(14) },
+              ]}
+            >
               Esforço mental
             </Text>
             <View style={styles.chipRow}>
@@ -382,7 +496,10 @@ export default function AddEditTaskScreen() {
                   { borderBottomColor: textColor },
                 ]}
               >
-                <Plus size={20} color={isDark ? "#9BA1A6" : themeAccent.accent} />
+                <Plus
+                  size={20}
+                  color={isDark ? "#9BA1A6" : themeAccent.accent}
+                />
                 <Text style={[styles.subtaskTriggerText, { color: textColor }]}>
                   Criar sub-tarefa
                 </Text>
@@ -478,7 +595,12 @@ export default function AddEditTaskScreen() {
 
               {detailsExpanded && (
                 <View style={styles.detailsContent}>
-                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: textColor, fontSize: fs(14) },
+                    ]}
+                  >
                     Prioridade
                   </Text>
                   <View style={styles.chipRow}>
@@ -508,7 +630,12 @@ export default function AddEditTaskScreen() {
                     ))}
                   </View>
 
-                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: textColor, fontSize: fs(14) },
+                    ]}
+                  >
                     Tempo estimado
                   </Text>
                   <TextInput
@@ -525,8 +652,24 @@ export default function AddEditTaskScreen() {
                     value={estimatedTime}
                     onChangeText={setEstimatedTime}
                   />
+                  {is24hOrMore && (
+                    <Text
+                      style={[
+                        styles.timeSuggestionHint,
+                        { color: iconColor, fontSize: fs(13) },
+                      ]}
+                    >
+                      Sugerimos quebrar em tarefas menores para facilitar o foco
+                      e o acompanhamento.
+                    </Text>
+                  )}
 
-                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: textColor, fontSize: fs(14) },
+                    ]}
+                  >
                     Descrição
                   </Text>
                   <TextInput
@@ -546,7 +689,12 @@ export default function AddEditTaskScreen() {
                     numberOfLines={4}
                   />
 
-                  <Text style={[styles.sectionLabel, { color: textColor, fontSize: fs(14) }]}>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: textColor, fontSize: fs(14) },
+                    ]}
+                  >
                     Tags
                   </Text>
                   <View
@@ -644,7 +792,7 @@ export default function AddEditTaskScreen() {
                       { color: iconColor },
                     ]}
                   >
-                    {isEdit ? "Salvar tarefa + Foco" : "Criar tarefa + Foco"}
+                    {isEdit ? "Atualizar + Foco" : "Criar tarefa + Foco"}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -661,9 +809,71 @@ export default function AddEditTaskScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.createTaskButtonText}>
-                {isEdit ? "Salvar tarefa" : "Criar tarefa"}
+                {isEdit ? "Atualizar" : "Criar tarefa"}
               </Text>
             </TouchableOpacity>
+
+            {!isCreateMode &&
+            (effectiveEditId || taskId || loadedTaskIdRef.current) ? (
+              <TouchableOpacity
+                style={[
+                  styles.deleteTaskButton,
+                  {
+                    borderColor: isDark ? "#6B7280" : "#e5e7eb",
+                    marginTop: 16,
+                    opacity: isDeleting ? 0.6 : 1,
+                  },
+                ]}
+                onPress={() => {
+                  if (isDeleting) return;
+                  const idToDelete =
+                    effectiveEditId ?? taskId ?? loadedTaskIdRef.current ?? "";
+                  const runDelete = () => {
+                    if (!idToDelete) return;
+                    setIsDeleting(true);
+                    (navigation as { navigate: (name: string, params?: object) => void }).navigate("Tarefas", {
+                      deleteTaskId: String(idToDelete),
+                    });
+                    setTimeout(() => setIsDeleting(false), DELETE_LOADING_DELAY_MS);
+                  };
+                  Keyboard.dismiss();
+                  if (Platform.OS === "web") {
+                    if (typeof window !== "undefined" && window.confirm("Tem certeza que deseja excluir esta tarefa?")) {
+                      runDelete();
+                    }
+                  } else {
+                    requestAnimationFrame(() => {
+                      Alert.alert(
+                        "Excluir tarefa",
+                        "Tem certeza que deseja excluir esta tarefa?",
+                        [
+                          { text: "Cancelar", style: "cancel" },
+                          { text: "Excluir", style: "destructive", onPress: runDelete },
+                        ],
+                      );
+                    });
+                  }
+                }}
+                activeOpacity={0.7}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={isDark ? "#F87171" : "#DC2626"}
+                  />
+                ) : (
+                  <Text
+                    style={[
+                      styles.deleteTaskButtonText,
+                      { color: isDark ? "#F87171" : "#DC2626" },
+                    ]}
+                  >
+                    Excluir tarefa
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -859,12 +1069,30 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
+  deleteTaskButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  deleteTaskButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
   input: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
+  },
+  timeSuggestionHint: {
+    marginTop: 6,
+    marginBottom: 0,
+    lineHeight: 18,
+    fontStyle: "italic",
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {

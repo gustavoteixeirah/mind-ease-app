@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -52,6 +53,7 @@ export default function ProfileScreen() {
   const [pauseMinutes, setPauseMinutes] = useState(5);
   const [themeColorIndex, setThemeColorIndex] = useState(0);
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(savedAppearance);
+  const [isSaving, setIsSaving] = useState(false);
 
   const themePreset = getThemePreset(themeColorIndex);
   const contentBg = isDark ? Colors.dark.background : "#fff";
@@ -97,7 +99,10 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  const SAVE_LOADING_DELAY_MS = 500;
+
   const handleSavePreferences = useCallback(() => {
+    setIsSaving(true);
     try {
       setPreferenceString(PreferenceKeys.FONT_SCALE_MODE, fontSizeMode);
       setPreferenceString(PreferenceKeys.FOCUS_MINUTES, String(focusMinutes));
@@ -109,6 +114,8 @@ export default function ProfileScreen() {
       Alert.alert("Sucesso", "Preferências salvas.");
     } catch (e) {
       Alert.alert("Erro", "Não foi possível salvar as preferências.");
+    } finally {
+      setTimeout(() => setIsSaving(false), SAVE_LOADING_DELAY_MS);
     }
   }, [fontSizeMode, focusMinutes, pauseMinutes, themeColorIndex, appearanceMode, setGlobalThemeIndex, setGlobalAppearance]);
 
@@ -378,13 +385,22 @@ export default function ProfileScreen() {
 
           {/* Salvar preferências */}
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: isDark ? "#374151" : "#111827" }]}
+            style={[
+              styles.saveButton,
+              { backgroundColor: isDark ? "#374151" : "#111827" },
+              isSaving && styles.saveButtonDisabled,
+            ]}
             onPress={handleSavePreferences}
             activeOpacity={0.8}
+            disabled={isSaving}
           >
-            <Text style={[styles.saveButtonText, { fontSize: fs(16) }]}>
-              Salvar preferências
-            </Text>
+            {isSaving ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={[styles.saveButtonText, { fontSize: fs(16) }]}>
+                Salvar preferências
+              </Text>
+            )}
           </TouchableOpacity>
 
           <View style={{ height: 32 }} />
@@ -494,6 +510,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: "#FFF",
