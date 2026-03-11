@@ -151,7 +151,15 @@ export default function FocusModeScreen() {
       taskFromParams?.id ? tasks.find((t) => t.id === taskFromParams.id) : null,
     [tasks, taskFromParams?.id],
   );
-  const task = fullTaskFromContext ?? taskFromParams;
+  const task = useMemo(() => {
+    const base = fullTaskFromContext ?? taskFromParams;
+    if (!base) return null;
+    const fromContext = fullTaskFromContext?.subtasks;
+    const fromParams = taskFromParams?.subtasks;
+    const subtasks =
+      (fromContext?.length ? fromContext : fromParams) ?? [];
+    return { ...base, subtasks };
+  }, [fullTaskFromContext, taskFromParams]);
 
   const [savedFocusMinutes, setSavedFocusMinutes] =
     useState(getSavedFocusMinutes);
@@ -497,7 +505,6 @@ export default function FocusModeScreen() {
             >
               Sub-tarefas
             </Text>
-            {console.log(subtasks)}
             {subtasks.map((st) => (
               <TouchableOpacity
                 key={st.id}
@@ -531,7 +538,6 @@ export default function FocusModeScreen() {
                   ]}
                 >
                   {st.text}
-                  {JSON.stringify(st)}
                 </Text>
               </TouchableOpacity>
             ))}
